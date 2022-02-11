@@ -16,6 +16,9 @@ import numpy as np
 
 
 def pad_vol(vol, kernel_shape):
+    # given a 3d volume and a kernel shape, pad the input so that applying the kernel on the volume will result in a volume with the original shape
+    # vol: 3d volume
+    # kernel_shape: [z_size, y_size, x_size]
     assert torch.all(torch.tensor(kernel_shape) % 2 == 1)
     padded_vol = F.pad(
         vol,
@@ -29,12 +32,9 @@ def pad_vol(vol, kernel_shape):
 
 
 def get_boundary(vol):
-    # vol [z,y,x] binary image (also works with ints, where 0s are background)
-    # True means part of contour
-    # kernel [z,y,x] binary image
-    # if True, not eroded
-    # z erode: whether to erode in the z-axis
-    # NOTE: this does not care about anisotropy on purpose
+    # gets foreground voxels which "touch" background pixels, as defined by a 3x3x3 kernel
+    # vol: 3d volume (with 0 indicating background)
+    # NOTE: this function intentionally ignores anisotropy
 
     vol = torch.from_numpy(vol.astype(bool))
     padded_vol = pad_vol(vol, [3, 3, 3])
@@ -48,7 +48,8 @@ def get_boundary(vol):
 
 # adapted from https://stackoverflow.com/questions/31400769/bounding-box-of-numpy-array
 def get_bbox(vol):
-    # assuming z,y,x ordering
+    # returns bounds of foreground pixels in volume, see return signature
+    # vol: 3d volume (with 0 indicating background)
     zs = np.any(vol, axis=(1, 2))
     ys = np.any(vol, axis=(0, 2))
     xs = np.any(vol, axis=(0, 1))
@@ -60,6 +61,10 @@ def get_bbox(vol):
 
 
 def get_dt(vol, anisotropy, black_border):
+    # computes euclidean distance transform (voxel-wise distance to nearest background)
+    # vol: 3d volume (with 0 indicating back)
+    # anisotropy: [x-size, y-size, z-size]
+    # black_border: whether volume boundaries should be treated as foreground or background
     assert (vol.flags["C_CONTIGUOUS"] + vol.flags["F_CONTIGUOUS"]) == 1
 
     dt = edt.edt(
@@ -75,14 +80,25 @@ def get_dt(vol, anisotropy, black_border):
 
 
 def get_sphere_bounds(boundary_idx, vals, boundary_inverse, erode_delta, anisotropy):
+    # computes bounding boxes for every boundary edt value
+    # returns [[zmin, zmax], [ymin, ymax], [xmin, xmax]] for every val
+    # boundary_idx: [z_i, y_i, x_i], result from np.nonzero(boundary)
+    # vals: edt values from boundary
+    # boundary_inverse: 1d array, mapping from each nonzero to vals
+    # erode_delta: nm, how much to dilate beyond edt
+    # anisotropy: [x-size, y-size, z-size]
     anisotropy = anisotropy[::-1]
     result = []
+
+    # iterate over unique edt values
     for i in range(len(vals)):
-        # z,y,x
+        # z,y,x nonzero indices with specific edt value
         coords = [boundary_idx[j][boundary_inverse == i] for j in range(3)]
         # NOTE: may need to add +1 for good measure
+        # sphere radius in terms of voxels
         offsets = [math.ceil((vals[i] + erode_delta) / anisotropy[j]) for j in range(3)]
 
+        # bounding boxes for each sphere radius
         result.append(
             [
                 [max(0, np.min(coords[j]) - offsets[j]), np.max(coords[j]) + offsets[j]]
@@ -93,6 +109,14 @@ def get_sphere_bounds(boundary_idx, vals, boundary_inverse, erode_delta, anisotr
 
 
 def sphere_expansion(vals, dt_boundary, sphere_bounds, erode_delta, anisotropy):
+    # expand spheres given inputs
+    # vals: edt values from boundary
+    # dt_boundary: dt from bg * boundary
+    # sphere_bounds: bounding box for each sphere radius
+    # erode_delta: nm, how much to dilate beyond edt
+    # anisotropy: [x-size, y-size, z-size]
+    # returns expanded spheres
+
     result = np.zeros_like(dt_boundary, dtype=bool)
     print("Expanding spheres")
     for i in tqdm(range(len(vals))):
@@ -110,9 +134,13 @@ def sphere_expansion(vals, dt_boundary, sphere_bounds, erode_delta, anisotropy):
 
 
 def sphere_iteration(expanded, dt, vol, erode_delta, anisotropy):
-    # expanded is the current sphere expansion to be dilated
-    # dt is dt from air
-    # vol is original vol
+    # performs sphere_iteration on volumes that may already be dilated
+    # dt: edt from background in original volume
+    # vol: original volume
+    # erode_delta: nm, how much to dilate beyond edt
+    # anisotropy: [x-size, y-size, z-size]
+    # returns newly dilated volume
+
     boundary = get_boundary(expanded)
     boundary_idx = np.nonzero(boundary)
     vals, boundary_inverse = np.unique(dt[boundary], return_inverse=True)
@@ -132,6 +160,13 @@ def sphere_iteration(expanded, dt, vol, erode_delta, anisotropy):
 def extract(
     vol, num_iter, max_erode, erode_delta, anisotropy=(6, 6, 30), connectivity=26
 ):
+    # gets volume segmentation
+    # vol: binary 3d volume
+    # max_erode: int/float, thresholding distance to cut off spines
+    # erode_delta: extra dilation over max_erode
+    # anisotropy: [x-size, y-size, z-size]
+    # connectivity: read cc3d docs
+
     # assert that volume is connected
     assert (
         cc3d.largest_k(
@@ -142,8 +177,6 @@ def extract(
         )[1]
         == 1
     )
-    # anisotropy in nm
-    # max_erode is how far from the boundary function extraction should occur
     dt = get_dt(vol, anisotropy, black_border=False)
     remaining = dt >= max_erode
     largest, N_remaining = cc3d.largest_k(
@@ -154,7 +187,7 @@ def extract(
     )
     # TODO: assert that final segmentation is only composed of single CC
     expanded = largest
-    for i in tqdm(range(num_iter)):
+    for _ in tqdm(range(num_iter)):
         expanded = sphere_iteration(expanded, dt, vol, erode_delta, anisotropy)
 
     others = np.logical_xor(vol, expanded)
@@ -172,21 +205,26 @@ def extract(
 
 
 def process_task(file, id, z1, z2, y1, y2, x1, x2):
+    # given file, segmentation id, and seg bounding boxes, save segmentations
+    # file: filename of original volume
+    # id: segmentation id
+    # ...: bbox
+
     save_file = os.path.join("results", f"{id}.npy")
     if os.path.isfile(save_file):
         return
     vol = h5py.File(file).get("main")
     assert vol.dtype == np.uint16
-    
+
     # offset in order to fix dt on boundaries
     # new start
-    nz, ny, nx = [max(0, i-1) for i in [z1, y1, x1]]
+    nz, ny, nx = [max(0, i - 1) for i in [z1, y1, x1]]
     vol = vol[nz : z2 + 2, ny : y2 + 2, nx : x2 + 2]
     vol = np.ascontiguousarray(vol) == id
 
     seg = extract(vol, num_iter=1, max_erode=50, erode_delta=5, connectivity=26)
     # remove offset
-    seg = seg[nz:nz+z2-z1+1, ny:ny+y2-y1+1, nx:nx+x2-x1+1]
+    seg = seg[nz : nz + z2 - z1 + 1, ny : ny + y2 - y1 + 1, nx : nx + x2 - x1 + 1]
     np.save(save_file, seg)
 
 

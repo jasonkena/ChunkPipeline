@@ -33,4 +33,4 @@ def merge(h5, bbox):
 if __name__ == "__main__":
     result, equivalency = merge("./den_ruilin_v2_16nm.h5", "bbox.npy")
     np.save("merged.npy", result)
-    json.dump(equivalency, open("equivalency.json", 'w'))
+    json.dump(equivalency, open("equivalency.json", "w"))
