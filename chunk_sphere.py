@@ -9,26 +9,11 @@ from imu.io import get_bb_all3d
 import os
 
 import numpy as np
+from utils import pad_vol
 
 # NOTE: here naive separation between segments is used: each segment id is processed separately
 # can potentially come up with a way to do it in a chunk-based manner instead of by segments
 # will need to deal with chunk boundaries then
-
-
-def pad_vol(vol, kernel_shape):
-    # given a 3d volume and a kernel shape, pad the input so that applying the kernel on the volume will result in a volume with the original shape
-    # vol: 3d volume
-    # kernel_shape: [z_size, y_size, x_size]
-    assert torch.all(torch.tensor(kernel_shape) % 2 == 1)
-    padded_vol = F.pad(
-        vol,
-        [
-            *[kernel_shape[0] // 2] * 2,
-            *[kernel_shape[1] // 2] * 2,
-            *[kernel_shape[2] // 2] * 2,
-        ],
-    )
-    return padded_vol
 
 
 def get_boundary(vol):
@@ -36,8 +21,9 @@ def get_boundary(vol):
     # vol: 3d volume (with 0 indicating background)
     # NOTE: this function intentionally ignores anisotropy
 
-    vol = torch.from_numpy(vol.astype(bool))
-    padded_vol = pad_vol(vol, [3, 3, 3])
+    vol = vol.astype(np.bool_)
+    padded_vol = torch.from_numpy(pad_vol(vol, [3, 3, 3]))
+    vol = torch.from_numpy(vol)
     boundary = torch.logical_and(
         F.max_pool3d((~padded_vol).float().unsqueeze(0), kernel_size=3, stride=1), vol
     ).squeeze(0)
@@ -63,13 +49,13 @@ def get_bbox(vol):
 def get_dt(vol, anisotropy, black_border):
     # computes euclidean distance transform (voxel-wise distance to nearest background)
     # vol: 3d volume (with 0 indicating back)
-    # anisotropy: [x-size, y-size, z-size]
+    # anisotropy: [z-size, y-size, x-size]
     # black_border: whether volume boundaries should be treated as foreground or background
     assert (vol.flags["C_CONTIGUOUS"] + vol.flags["F_CONTIGUOUS"]) == 1
 
     dt = edt.edt(
         vol,
-        anisotropy=anisotropy,
+        anisotropy=anisotropy[::-1],
         black_border=black_border,
         order="C"
         if vol.flags["C_CONTIGUOUS"]
@@ -86,8 +72,7 @@ def get_sphere_bounds(boundary_idx, vals, boundary_inverse, erode_delta, anisotr
     # vals: edt values from boundary
     # boundary_inverse: 1d array, mapping from each nonzero to vals
     # erode_delta: nm, how much to dilate beyond edt
-    # anisotropy: [x-size, y-size, z-size]
-    anisotropy = anisotropy[::-1]
+    # anisotropy: [z-size, y-size, x-size]
     result = []
 
     # iterate over unique edt values
@@ -114,7 +99,7 @@ def sphere_expansion(vals, dt_boundary, sphere_bounds, erode_delta, anisotropy):
     # dt_boundary: dt from bg * boundary
     # sphere_bounds: bounding box for each sphere radius
     # erode_delta: nm, how much to dilate beyond edt
-    # anisotropy: [x-size, y-size, z-size]
+    # anisotropy: [z-size, y-size, x-size]
     # returns expanded spheres
 
     result = np.zeros_like(dt_boundary, dtype=bool)
@@ -138,7 +123,7 @@ def sphere_iteration(expanded, dt, vol, erode_delta, anisotropy):
     # dt: edt from background in original volume
     # vol: original volume
     # erode_delta: nm, how much to dilate beyond edt
-    # anisotropy: [x-size, y-size, z-size]
+    # anisotropy: [z-size, y-size, x-size]
     # returns newly dilated volume
 
     boundary = get_boundary(expanded)
@@ -158,13 +143,13 @@ def sphere_iteration(expanded, dt, vol, erode_delta, anisotropy):
 
 
 def extract(
-    vol, num_iter, max_erode, erode_delta, anisotropy=(6, 6, 30), connectivity=26
+    vol, num_iter, max_erode, erode_delta, anisotropy=(30, 6, 6), connectivity=26
 ):
     # gets volume segmentation
     # vol: binary 3d volume
     # max_erode: int/float, thresholding distance to cut off spines
     # erode_delta: extra dilation over max_erode
-    # anisotropy: [x-size, y-size, z-size]
+    # anisotropy: [z-size, y-size, x-size]
     # connectivity: read cc3d docs
 
     # assert that volume is connected
