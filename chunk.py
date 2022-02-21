@@ -12,7 +12,7 @@ import math
 def extend_slices(slices, half):
     # computes slices to extend slice to include 1 neighboring voxel, and corresponding slice to undo it, restoring original size
     # slices: input slices from np.s_
-    # half: whether only to extend right side
+    # half: whether to only extend right side
     # returns new_slices and shrink_slices
     new_slices = tuple(slice(max(0, i.start - (not half)), i.stop + 1) for i in slices)
     is_left_extended = [int((i.start > 0) and (not half)) for i in slices]
@@ -34,18 +34,21 @@ def simple_chunk(
 ):
     # chunks operations (func) on input
     # dataset_output: output dataset to write to; if None, will write to nested array
-    # dataset_inputs: list of h5 datasets
+    # dataset_inputs: list of h5 datasets; if non-list, will be treated as size of input for zyx
     # chunk_size: [size_z, size_y, size_x]
     # pad: "zero", "extend", "half_extend" or False value, output will be trimmed
-    # zero will always pad each dimension by 2, extend will do the same if not on boundary
+    # zero will always pad each dimension by 2, extend will do the same if not on boundary, half_extend right_extends
     # func, *args, **kwargs: self-explanatory
 
     # NOTE: assumes input sizes are all equal and that output size = input size
-    # NOTE: func may overwrite inputs, if attempting to parallelize, be aware
+    # NOTE: func may overwrite inputs, beware if attempting to parallelize
 
     if dataset_output == None:
         dataset_output = []
-    shape = dataset_inputs[0].shape
+    if isinstance(dataset_inputs, list):
+        shape = dataset_inputs[0].shape
+    else:
+        shape = dataset_inputs
     n_iter = [math.ceil(shape[i] / chunk_size[i]) for i in range(3)]
 
     for z in range(n_iter[0]):
@@ -63,7 +66,10 @@ def simple_chunk(
                 else:
                     slices = original_slices
 
-                inputs = [i[slices] for i in dataset_inputs]
+                if isinstance(dataset_inputs, list):
+                    inputs = [i[slices] for i in dataset_inputs]
+                else:
+                    inputs = []
                 if pad == "zero":
                     inputs = [pad_vol(i, [3, 3, 3]) for i in inputs]
 
@@ -96,6 +102,7 @@ def get_is_first_unique(array):
 
 
 def _chunk_bbox(z, y, x, chunk_size, vol):
+    # add offset to bounding boxes based on zyx
     bboxes = get_bb_all3d(vol)
     bboxes[:, 1:3] += chunk_size[0] * z
     bboxes[:, 3:5] += chunk_size[1] * y
@@ -130,129 +137,126 @@ def chunk_bbox(vol, chunk_size):
     return np.array(result)
 
 
-def shrink_slices(slices, shrink, idx):
-    # shrink: [shrink_z, shrink_y, shrink_x] whether to compress dimension
-    # idx: [z, y, x] cluster coords
-    # returns overall slice, original part of slice, other part of slice, along with idx of other part of slice
-    # NOTE: NOTE: NOTE: does not take into account boundaries?
-    new_slices = [
-        [slice(slices[i].stop - 1, slices[i].stop + 1), slice(0, 1), slice(1, 2)]
-        if shrink[i]
-        else [slices[i], slice(None, None, None), slice(None, None, None)]
-        for i in range(len(slices))
-    ]
-    new_slices = np.array(new_slices, dtype=object).T.tolist()
-    new_slices = [tuple(i) for i in new_slices]
-
-    new_idx = [idx[i] + shrink[i] for i in range(len(slices))]
-    return [*new_slices, new_idx]
-
-
-def neighbor_slices(slices, idx):
-    # generates 7 slices (each with 3 slices and idx)
-    # 3 for faces, 3 for edges, 1 for corner
-
-    # skipping idx 0 which is doesn't shrink anything
-    shrinks = list(itertools.product([0, 1], repeat=3))[1:]
-    all_slices = [shrink_slices(slices, shrink, idx) for shrink in shrinks]
-    return all_slices
-
-
 def _chunk_cc3d_neighbors(
-    z, y, x, chunk_size, partial_cc3d, partial_statistics, uf, connectivity, remapping
+    z,
+    y,
+    x,
+    chunk_size,
+    partial_cc3d,
+    partial_statistics,
+    uf,
+    connectivity,
+    remapping,
+    group_cache,
+    mask,
 ):
+    # performs unions on connected components based on neighbors
+    mask = mask[
+        : partial_cc3d.shape[0], : partial_cc3d.shape[1], : partial_cc3d.shape[2]
+    ]
     # arange instead of zeros, to accomodate non-boundary components
     remapping[(z, y, x)] = np.arange(
-        partial_statistics[z, y, x]["voxel_counts"].shape[0]
+        partial_statistics[z, y, x]["voxel_counts"].shape[0], dtype=partial_cc3d.dtype
     )
 
     # required for non-boundary components
     for i in range(1, partial_statistics[z, y, x]["voxel_counts"].shape[0]):
         uf.add((z, y, x, i))
 
-    # NOTE: NOTE: NOTE: this must stay in order to properly calculate boundaries on slice. or else edg
-    slices = np.s_[
-        0 : chunk_size[0],
-        0 : chunk_size[1],
-        0 : chunk_size[2],
+    neighbors = group_cache.get(f"{z},{y},{x}")[:]
+    zyx_idx = neighbors[:, :-1]
+    new_cc_idx = partial_cc3d[mask]
+    old_cc_idx = neighbors[:, -1]
+
+    order = np.argsort(old_cc_idx)
+    zyx_idx, new_cc_idx, old_cc_idx = [
+        i[order] for i in [zyx_idx, new_cc_idx, old_cc_idx]
     ]
-    # NOTE: slices can be cached
-    neighboring_slices = neighbor_slices(slices, [z, y, x])
 
-    # iterate over neighbors
-    for i in range(len(neighboring_slices)):
-        full_slice = partial_cc3d[neighboring_slices[i][0]]
-        cc_slice = cc3d.connected_components(full_slice != 0, connectivity=connectivity)
-        print(
-            f"z,y,x: {(z,y,x)}, {full_slice.shape}, {cc_slice.shape}, {cc_slice[neighboring_slices[i][2]].shape}"
-        )
-        if 0 in cc_slice[neighboring_slices[i][2]].shape:
+    is_valid = new_cc_idx != 0
+    zyx_idx, new_cc_idx, old_cc_idx = [
+        i[is_valid] for i in [zyx_idx, new_cc_idx, old_cc_idx]
+    ]
+
+    result = np.concatenate((zyx_idx, new_cc_idx.reshape(-1, 1)), axis=-1).reshape(
+        -1, zyx_idx.shape[-1] + 1
+    )
+
+    unique_idx = get_is_first_unique(old_cc_idx)
+    for i, is_first_unique in enumerate(unique_idx):
+        if is_first_unique:
             continue
-
-        cc_idx = np.concatenate(
-            (
-                cc_slice[neighboring_slices[i][1]].reshape(-1),
-                cc_slice[neighboring_slices[i][2]].reshape(-1),
-            )
-        )
-        idx_order = np.argsort(cc_idx)
-        cc_idx = cc_idx[idx_order]
-
-        base_idx = np.concatenate(
-            (
-                np.stack(
-                    np.broadcast_arrays(
-                        z,
-                        y,
-                        x,
-                        full_slice[neighboring_slices[i][1]].reshape(-1),
-                    ),
-                    axis=1,
-                ),
-                np.stack(
-                    np.broadcast_arrays(
-                        *neighboring_slices[i][3],  # z,y,x of neighbor
-                        full_slice[neighboring_slices[i][2]].reshape(-1),
-                    ),
-                    axis=1,
-                ),
-            )
-        )
-        base_idx = base_idx[idx_order]
-
-        is_valid = cc_idx != 0
-        cc_idx = cc_idx[is_valid]
-        base_idx = base_idx[is_valid]
-        assert np.all(base_idx[:, 3] != 0)
-
-        unique_idx = get_is_first_unique(cc_idx)
-
-        for j, is_first_unique in enumerate(unique_idx):
-            if is_first_unique:
-                continue
-            uf.union(tuple(base_idx[j]), tuple(base_idx[j - 1]))
+        uf.union(tuple(result[i]), tuple(result[i - 1]))
 
 
 def _chunk_remap_cc3d(z, y, x, chunk_size, partial_cc3d, remapping):
     return remapping[(z, y, x)][partial_cc3d]
 
 
-def chunk_cc3d(dataset_output, vol, chunk_size, connectivity):
+def _chunk_half_extend_cc3d(
+    z, y, x, chunk_size, vol, zyx_idx, mask, group_cache, connectivity
+):
+    connected_components = cc3d.connected_components(
+        vol != 0, connectivity=connectivity
+    )
+    # trim mask to fit chunk
+    mask = mask[: vol.shape[0], : vol.shape[1], : vol.shape[2]]
+    neighbors = np.concatenate(
+        (
+            zyx_idx[mask],
+            connected_components[mask].reshape(-1, 1),
+        ),
+        axis=-1,
+    ).reshape(-1, zyx_idx.shape[-1] + 1)
+    dataset_neighbors = group_cache.create_dataset(
+        f"{z},{y},{x}", neighbors.shape, dtype=neighbors.dtype
+    )
+    dataset_neighbors[:] = neighbors
+
+    # will be trimmed automatically
+    return connected_components
+
+
+def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
     # perform chunked cc3d calculations
     # dataset_output: output dataset to write to; if None, will write to nested array
     # vol: h5 dataset used as input
     # chunk_size: [size_z, size_y, size_x]
+    # dataset_cache: vol, 3
+    # NOTE: if IndexError is emitted, result is invalid
+
+    # cc3d only handles inputs > 1
+    assert all([i > 1 for i in chunk_size])
+    dataset_cache = group_cache.create_dataset(
+        "cache", (*vol.shape, 3), dtype=vol.dtype
+    )
+    zyx_idx = simple_chunk(
+        dataset_cache,
+        vol.shape,
+        chunk_size,
+        False,
+        True,
+        lambda z, y, x, chunk_size: np.array([z, y, x]).reshape(1, 1, -1),
+    )
+
+    # mask for half extend
+    mask = np.ones([i + 1 for i in chunk_size], dtype=bool)
+    # 2 instead of 1 because of [[0,1], [1,0]] edge case
+    mask[:-2, :-2, :-2] = False
 
     # perform cc3d on individual chunks
     partial_cc3d = simple_chunk(
         dataset_output,
-        [vol],
+        [vol, zyx_idx],
         chunk_size,
-        False,
-        False,
-        cc3d.connected_components,
-        connectivity=connectivity,
+        "half_extend",
+        True,
+        _chunk_half_extend_cc3d,
+        mask,
+        group_cache,
+        connectivity,
     )
+
     # TODO: don't hardcode dtype
     # get voxel_counts for each chunk
     partial_statistics = simple_chunk(
@@ -278,6 +282,8 @@ def chunk_cc3d(dataset_output, vol, chunk_size, connectivity):
         uf,
         connectivity,
         remapping,
+        group_cache,
+        mask,
     )
 
     # list of sets containing components
@@ -286,9 +292,12 @@ def chunk_cc3d(dataset_output, vol, chunk_size, connectivity):
     voxel_counts = np.zeros(mapping.shape[0], dtype=int)
     for i in range(mapping.shape[0]):
         for val in mapping[i]:
-            voxel_counts[i] += partial_statistics[val[0], val[1], val[2]][
+            voxel_statistics = partial_statistics[val[0], val[1], val[2]][
                 "voxel_counts"
-            ][val[3]]
+            ]
+            # due to half_extend_cc3d connections which are not included in statistics
+            if val[3] < voxel_statistics.shape[0]:
+                voxel_counts[i] += voxel_statistics[val[3]]
     order = np.argsort(voxel_counts)[::-1]
     voxel_counts = voxel_counts[order]
     mapping = mapping[order]
@@ -299,6 +308,9 @@ def chunk_cc3d(dataset_output, vol, chunk_size, connectivity):
             voxel_counts,
         )
     )
+
+    voxel_counts = voxel_counts[: np.max(np.nonzero(voxel_counts)[0]) + 1]
+    assert np.all(voxel_counts[1:] > 0)
 
     # NOTE: can vectorize remapping assignment
     for i, key in enumerate(range(mapping.shape[0]), 1):
