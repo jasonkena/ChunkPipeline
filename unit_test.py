@@ -17,7 +17,6 @@ class ChunkTest(unittest.TestCase):
             pass
 
     def test_simple_chunk_output(self):
-        return
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
 
@@ -41,10 +40,9 @@ class ChunkTest(unittest.TestCase):
                 lambda x, y: x > y,
             )
             print(f"pad method: {pad}")
-            self.assertTrue(np.all(output[:] == gt))
+            self.assertTrue(np.array_equal(output[:], gt))
 
     def test_chunk_bbox(self):
-        return
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
 
@@ -55,7 +53,7 @@ class ChunkTest(unittest.TestCase):
         f.create_dataset("input", shape, dtype="i")[:] = input
 
         output = chunk.chunk_bbox(f.get("input"), chunk_size)
-        self.assertTrue(np.all(output == gt))
+        self.assertTrue(np.array_equal(output, gt))
 
     def test_cc3d(self):
         shape = (100, 100, 100)
@@ -79,7 +77,7 @@ class ChunkTest(unittest.TestCase):
         print(f"N: {N}, gt_N: {gt_N}")
 
         self.assertTrue(N == gt_N)
-        self.assertTrue(np.all(output[0][:] == gt))
+        self.assertTrue(np.array_equal(output[0][:], gt))
 
 
 if __name__ == "__main__":

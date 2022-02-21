@@ -41,7 +41,7 @@ def simple_chunk(
     # func, *args, **kwargs: self-explanatory
 
     # NOTE: assumes input sizes are all equal and that output size = input size
-    # NOTE: func may overwrite inputs, beware if attempting to parallelize
+    # NOTE: func should not overwrite input; just pass same dataset as output
 
     if dataset_output == None:
         dataset_output = []
