@@ -9,19 +9,33 @@ import cc3d
 import math
 
 
-def extend_slices(slices, half):
+def extend_slices(slices, half, pad_width):
     # computes slices to extend slice to include 1 neighboring voxel, and corresponding slice to undo it, restoring original size
     # slices: input slices from np.s_
     # half: whether to only extend right side
     # returns new_slices and shrink_slices
-    new_slices = tuple(slice(max(0, i.start - (not half)), i.stop + 1) for i in slices)
-    is_left_extended = [int((i.start > 0) and (not half)) for i in slices]
+    new_slices = tuple(
+        slice(
+            max(0, slices[i].start - (not half) * pad_width[i]),
+            slices[i].stop + pad_width[i],
+        )
+        for i in range(len(slices))
+    )
+    left_start = [
+        (
+            pad_width[i]
+            if slices[i].start >= pad_width[i]
+            else slices[i].start
+        )
+        * (not half)
+        for i in range(len(slices))
+    ]
     distances = [i.stop - i.start for i in slices]
 
     shrink_slices = tuple(
         slice(
-            is_left_extended[i],
-            is_left_extended[i] + distances[i],
+            left_start[i],
+            left_start[i] + distances[i],
         )
         for i in range(len(slices))
     )
@@ -30,7 +44,15 @@ def extend_slices(slices, half):
 
 
 def simple_chunk(
-    dataset_output, dataset_inputs, chunk_size, pad, pass_params, func, *args, **kwargs
+    dataset_output,
+    dataset_inputs,
+    chunk_size,
+    func,
+    pad=False,
+    pass_params=False,
+    pad_width=(1, 1, 1),
+    *args,
+    **kwargs,
 ):
     # chunks operations (func) on input
     # dataset_output: output dataset to write to; if None, will write to nested array
@@ -43,6 +65,7 @@ def simple_chunk(
     # NOTE: assumes input sizes are all equal and that output size = input size
     # NOTE: func should not overwrite input; just pass same dataset as output
 
+    assert pad in ["zero", "extend", "half_extend", False]
     if dataset_output == None:
         dataset_output = []
     if isinstance(dataset_inputs, list):
@@ -61,7 +84,7 @@ def simple_chunk(
                 ]
                 if pad == "extend" or pad == "half_extend":
                     slices, shrink_slices = extend_slices(
-                        original_slices, pad == "half_extend"
+                        original_slices, pad == "half_extend", pad_width
                     )
                 else:
                     slices = original_slices
@@ -71,7 +94,9 @@ def simple_chunk(
                 else:
                     inputs = []
                 if pad == "zero":
-                    inputs = [pad_vol(i, [3, 3, 3]) for i in inputs]
+                    inputs = [
+                        pad_vol(i, [j * 2 + 1 for j in pad_width]) for i in inputs
+                    ]
 
                 if pass_params:
                     output = func(z, y, x, chunk_size, *inputs, *args, **kwargs)
@@ -119,7 +144,7 @@ def chunk_bbox(vol, chunk_size):
 
     # restore original coordinates
     # [z,y,x], then [seg id, zmin, zmax, etc]
-    bboxes = simple_chunk(None, [vol], chunk_size, False, True, _chunk_bbox)
+    bboxes = simple_chunk(None, [vol], chunk_size, _chunk_bbox, pass_params=True)
     bboxes = np.concatenate(bboxes.reshape(-1).tolist(), axis=0)
     bboxes = bboxes[np.argsort(bboxes[:, 0])]
     assert not np.any(bboxes[:, 0] == 0)
@@ -234,9 +259,8 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
         dataset_cache,
         vol.shape,
         chunk_size,
-        False,
-        True,
         lambda z, y, x, chunk_size: np.array([z, y, x]).reshape(1, 1, -1),
+        pass_params=True,
     )
 
     # mask for half extend
@@ -249,12 +273,12 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
         dataset_output,
         [vol, zyx_idx],
         chunk_size,
-        "half_extend",
-        True,
         _chunk_half_extend_cc3d,
-        mask,
-        group_cache,
-        connectivity,
+        pad="half_extend",
+        pass_params=True,
+        mask=mask,
+        group_cache=group_cache,
+        connectivity=connectivity,
     )
 
     # TODO: don't hardcode dtype
@@ -263,8 +287,6 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
         None,
         [partial_cc3d],
         chunk_size,
-        False,
-        False,
         lambda vol: cc3d.statistics(vol.astype(np.uint64)),
     )
 
@@ -275,15 +297,15 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
         None,
         [partial_cc3d],
         chunk_size,
-        "half_extend",
-        True,
         _chunk_cc3d_neighbors,
-        partial_statistics,
-        uf,
-        connectivity,
-        remapping,
-        group_cache,
-        mask,
+        pad="half_extend",
+        pass_params=True,
+        partial_statistics=partial_statistics,
+        uf=uf,
+        connectivity=connectivity,
+        remapping=remapping,
+        group_cache=group_cache,
+        mask=mask,
     )
 
     # list of sets containing components
@@ -322,10 +344,9 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
         partial_cc3d,
         [partial_cc3d],
         chunk_size,
-        False,
-        True,
         _chunk_remap_cc3d,
-        remapping,
+        pass_params=True,
+        remapping=remapping,
     )
     return partial_cc3d, voxel_counts
 
@@ -342,5 +363,5 @@ if __name__ == "__main__":
     single_idx = output.get("single_idx")
     cc3d_output = output.get("cc3d_output")
 
-    simple_chunk(single_idx, [file], chunk_size, False, False, lambda vol: vol == idx)
+    simple_chunk(single_idx, [file], chunk_size, lambda vol: vol == idx)
     chunk_cc3d(cc3d_output, single_idx, chunk_size, connectivity=26)
