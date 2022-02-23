@@ -25,7 +25,7 @@ def _chunk_argwhere(params, *args, **kwargs):
     return idx
 
 
-def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, bbox, num_workers):
+def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, bbox, pad, num_workers):
     # TODO: implement chunked saving instead of aggregating all indices
     return np.concatenate(
         chunk.simple_chunk(
@@ -34,6 +34,7 @@ def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, bbox, num_workers):
             chunk_size,
             _chunk_argwhere,
             num_workers,
+            pad=pad,
             pass_params=True,
             bbox=bbox,
             chunk_func=chunk_func,
@@ -43,6 +44,7 @@ def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, bbox, num_workers):
 
 def chunk_func_spine(params, all, spine, id):
     shrink_slices = params["shrink_slices"]
+    assert shrink_slices is not None
     boundary = chunk_sphere._chunk_get_boundary(all == id)
     return boundary[shrink_slices], (spine == id)[shrink_slices]
 
@@ -62,6 +64,7 @@ if __name__ == "__main__":
                 CHUNK_SIZE,
                 lambda params, all, spine: chunk_func_spine(params, all, spine, row[0]),
                 row,
+                "extend",
                 NUM_WORKERS,
             ),
             dtype="uint16",

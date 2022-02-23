@@ -194,6 +194,7 @@ class ChunkTest(unittest.TestCase):
             chunk_size,
             lambda params, vol: [vol == bbox[0], None],
             bbox,
+            False,
             num_workers,
         )
         output = output[np.lexsort(output.T)]

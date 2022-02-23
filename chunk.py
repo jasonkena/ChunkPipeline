@@ -121,7 +121,6 @@ def simple_chunk(
         shape = dataset_inputs
 
     if bbox is not False:
-        assert pad == False
         bbox = bbox[1:]
         ranges = [
             # takes into account bbox's inclusivity
