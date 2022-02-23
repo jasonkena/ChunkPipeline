@@ -192,7 +192,7 @@ class ChunkTest(unittest.TestCase):
         output = chunk_argwhere(
             [f.get("input")],
             chunk_size,
-            lambda vol: [vol == bbox[0], None],
+            lambda params, vol: [vol == bbox[0], None],
             bbox,
             num_workers,
         )

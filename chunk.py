@@ -187,7 +187,7 @@ def get_is_first_unique(array):
 
 
 def _chunk_bbox(params, vol):
-    z,y,x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
+    z, y, x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
     # add offset to bounding boxes based on zyx
     bboxes = get_bb_all3d(vol)
     bboxes[:, 1:3] += chunk_size[0] * z
@@ -234,7 +234,7 @@ def _chunk_cc3d_neighbors(
     group_cache,
     mask,
 ):
-    z,y,x = [params[i] for i in ["z", "y", "x"]]
+    z, y, x = [params[i] for i in ["z", "y", "x"]]
     # performs unions on connected components based on neighbors
     mask = mask[
         : partial_cc3d.shape[0], : partial_cc3d.shape[1], : partial_cc3d.shape[2]
@@ -275,14 +275,12 @@ def _chunk_cc3d_neighbors(
 
 
 def _chunk_remap_cc3d(params, partial_cc3d, remapping):
-    z,y,x= [params[i] for i in ["z", "y", "x"]]
+    z, y, x = [params[i] for i in ["z", "y", "x"]]
     return remapping[(z, y, x)][partial_cc3d]
 
 
-def _chunk_half_extend_cc3d(
-    params, vol, zyx_idx, mask, group_cache, connectivity
-):
-    z,y,x= [params[i] for i in ["z", "y", "x"]]
+def _chunk_half_extend_cc3d(params, vol, zyx_idx, mask, group_cache, connectivity):
+    z, y, x = [params[i] for i in ["z", "y", "x"]]
     connected_components = cc3d.connected_components(
         vol != 0, connectivity=connectivity
     )
@@ -321,7 +319,9 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         dataset_cache,
         vol.shape,
         chunk_size,
-        lambda params : np.array([params["z"], params["y"], params["x"]]).reshape(1, 1, -1),
+        lambda params: np.array([params["z"], params["y"], params["x"]]).reshape(
+            1, 1, -1
+        ),
         num_workers,
         pass_params=True,
     )
@@ -418,7 +418,7 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
 
 
 def _chunk_write_seg(params, vol, output, bbox_in):
-    z,y,x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
+    z, y, x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
     # NOTE: will need to rewrite this to implement parallelism
     idx = [z, y, x]
     # extra +1 due to bbox format
