@@ -16,7 +16,7 @@ def _chunk_argwhere(z, y, x, chunk_size, *args, **kwargs):
     idx = np.argwhere(mask)
     if extra is not None:
         extra_dim = 1 if mask.ndim < 4 else mask.shape[3]
-        idx = np.concatenate((idx, extra[idx].reshape(-1, extra_dim)), axis=1)
+        idx = np.concatenate((idx, extra[mask].reshape(-1, extra_dim)), axis=1)
     idx[:, 0] += chunk_size[0] * z
     idx[:, 1] += chunk_size[1] * y
     idx[:, 2] += chunk_size[2] * x
