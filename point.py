@@ -56,22 +56,23 @@ def main(input_path, id):
     spine = h5py.File(os.path.join(input_path, "seg_den_spine_6nm.h5"))
 
     bboxes = np.loadtxt(os.path.join(input_path, "den_6nm_bb.txt"), dtype=int)
-    output = h5py.File(os.path.join("results", f"{id}.h5"), "w")
-
     row = bboxes[id]
-    for row in bboxes:
-        output.create_dataset(
-            "main",
-            data=chunk_argwhere(
-                [all.get("main"), spine.get("main")],
-                CHUNK_SIZE,
-                lambda params, all, spine: chunk_func_spine(params, all, spine, row[0]),
-                row,
-                "extend",
-                NUM_WORKERS,
-            ),
-            dtype="uint16",
-        )
+
+    output_file = os.path.join("results", f"{row[0]}.npy")
+    if os.path.exists(output_file):
+        return
+
+    np.save(
+        output_file,
+        chunk_argwhere(
+            [all.get("main"), spine.get("main")],
+            CHUNK_SIZE,
+            lambda params, all, spine: chunk_func_spine(params, all, spine, row[0]),
+            row,
+            "extend",
+            NUM_WORKERS,
+        ),
+    )
 
 
 if __name__ == "__main__":
