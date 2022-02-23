@@ -3,6 +3,7 @@ import chunk
 import chunk_sphere
 import h5py
 import os
+import sys
 from settings import *
 
 
@@ -49,16 +50,18 @@ def chunk_func_spine(params, all, spine, id):
     return boundary[shrink_slices], (spine == id)[shrink_slices]
 
 
-if __name__ == "__main__":
-    all = h5py.File("seg_den_6nm.h5")
-    spine = h5py.File("seg_den_spine_6nm.h5")
+def main(input_path, id):
+    # id is in range(50)
+    all = h5py.File(os.path.join(input_path, "seg_den_6nm.h5"))
+    spine = h5py.File(os.path.join(input_path, "seg_den_spine_6nm.h5"))
 
-    bboxes = np.loadtxt("den_6nm_bb.txt", dtype=int)
-    output = h5py.File("test_point.h5", "w")
+    bboxes = np.loadtxt(os.path.join(input_path, "den_6nm_bb.txt"), dtype=int)
+    output = h5py.File(os.path.join("results", f"{id}.h5"), "w")
 
+    row = bboxes[id]
     for row in bboxes:
         output.create_dataset(
-            str(row[0]),
+            "main",
             data=chunk_argwhere(
                 [all.get("main"), spine.get("main")],
                 CHUNK_SIZE,
@@ -69,3 +72,7 @@ if __name__ == "__main__":
             ),
             dtype="uint16",
         )
+
+
+if __name__ == "__main__":
+    main(sys.argv[1], int(sys.argv[2]))
