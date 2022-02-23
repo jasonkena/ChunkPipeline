@@ -29,7 +29,7 @@ def _chunk_get_boundary(vol):
     return boundary.numpy()
 
 
-def get_boundary(boundary_dataset, vol, num_workers):
+def get_boundary(boundary_dataset, vol, chunk_size, num_workers):
     # gets foreground voxels which "touch" background pixels, as defined by a 3x3x3 kernel
     # vol: 3d volume (with 0 indicating background)
     # NOTE: this function intentionally ignores anisotropy
@@ -38,7 +38,7 @@ def get_boundary(boundary_dataset, vol, num_workers):
     return chunk.simple_chunk(
         boundary_dataset,
         [vol],
-        CHUNK_SIZE,
+        chunk_size,
         _chunk_get_boundary,
         num_workers,
         pad="extend",
