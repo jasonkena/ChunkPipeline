@@ -177,7 +177,7 @@ class ChunkTest(unittest.TestCase):
         # test both argwhere_seg and simple_chunk's bbox
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
-        num_workers = 0
+        num_workers = 2
 
         input = np.zeros(shape, dtype=int)
         input[50:60, 50:60, 50:60] = np.random.randint(0, 10, (10, 10, 10))
@@ -187,7 +187,7 @@ class ChunkTest(unittest.TestCase):
 
         # get first row
         bbox = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)[0]
-        bbox[0] = 1
+        assert bbox[0] == 1
 
         output = chunk_argwhere(
             [f.get("input")],
@@ -203,7 +203,37 @@ class ChunkTest(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output[:], idx))
 
-    # TODO: implement get_seg testing
+    def test_get_seg(self):
+        # test both argwhere_seg and simple_chunk's bbox
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+        num_workers = 2
+
+        input = np.zeros(shape, dtype=int)
+        input[50:60, 50:60, 50:60] = np.random.randint(0, 10, (10, 10, 10))
+
+        f = h5py.File("test.hdf5", "w")
+        f.create_dataset("input", data=input)
+
+        # get first row
+        bbox = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)[0]
+        assert bbox[0] == 1
+
+        f.create_dataset(
+            "output",
+            shape=(bbox[2] - bbox[1] + 1, bbox[4] - bbox[3] + 1, bbox[6] - bbox[5] + 1),
+            dtype="u1",
+        )
+        seg = chunk.get_seg(
+            f.get("output"), f.get("input"), bbox, chunk_size, num_workers
+        )
+
+        gt = (
+            input[bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1]
+            == bbox[0]
+        )
+
+        self.assertTrue(np.array_equal(seg[:], gt))
 
 
 if __name__ == "__main__":

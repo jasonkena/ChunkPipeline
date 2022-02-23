@@ -107,6 +107,7 @@ def simple_chunk(
     # zero will always pad each dimension by 2, extend will do the same if not on boundary, half_extend right_extends
     # func, *args, **kwargs: self-explanatory
     # bbox: inclusive ranges to perform the computation on, of the form [id, z1, z2, y1, y2, x1, x2]
+    # TODO: take into account extend for bbox
 
     # NOTE: assumes input sizes are all equal and that output size = input size
     # NOTE: func should not overwrite input; just pass same dataset as output
@@ -120,6 +121,7 @@ def simple_chunk(
         shape = dataset_inputs
 
     if bbox is not False:
+        assert pad == False
         bbox = bbox[1:]
         ranges = [
             # takes into account bbox's inclusivity
@@ -412,39 +414,53 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
     return partial_cc3d, voxel_counts
 
 
-def _chunk_write_seg(z, y, x, chunk_size, vol, dataset_output, bbox):
+def _chunk_write_seg(z, y, x, chunk_size, vol, output, bbox_in):
     # note: will need to rewrite this to implement parallelism
     idx = [z, y, x]
     # extra +1 due to bbox format
     read_slices = [
         slice(
-            np.max(0, bbox[2 * i + 1] - idx[i] * chunk_size[i]),
-            np.min(chunk_size[i] - 1, bbox[2 * i + 1 + 1] - idx[i] * chunk_size[2]) + 1,
+            max(0, bbox_in[2 * i + 1] - idx[i] * chunk_size[i]),
+            min(chunk_size[i] - 1, bbox_in[2 * i + 1 + 1] - idx[i] * chunk_size[i]),
         )
         for i in range(3)
     ]
+    distances = [i.stop - i.start for i in read_slices]
     write_slices = [
         slice(
-            np.max(idx[i] * chunk_size[i] - bbox[2 * i + 1], 0),
-            np.min(
-                idx[i] * (chunk_size[i] + 1) - bbox[2 * i + 1 + 1] - 1,
-                bbox[2 * i + 1 + 1] - bbox[2 * i + 1],
-            )
-            + 1,
+            max(idx[i] * chunk_size[i] - bbox_in[2 * i + 1], 0),
+            max(idx[i] * chunk_size[i] - bbox_in[2 * i + 1], 0) + distances[i],
         )
         for i in range(3)
     ]
-    dataset_output[write_slices] = (vol == bbox[0])[read_slices]
+    output[
+        write_slices[0].start : write_slices[0].stop + 1,
+        write_slices[1].start : write_slices[1].stop + 1,
+        write_slices[2].start : write_slices[2].stop + 1,
+    ] = (vol == bbox_in[0])[
+        read_slices[0].start : read_slices[0].stop + 1,
+        read_slices[1].start : read_slices[1].stop + 1,
+        read_slices[2].start : read_slices[2].stop + 1,
+    ]
 
 
-def get_seg(file, vol, bbox, dtype, chunk_size, num_workers):
+def get_seg(output, vol, bbox, chunk_size, num_workers):
     # NOTE: need to reimplement this for func parallelism
     # extra +1 due to bbox format
-    shape = (1 + bbox[2 * i + 1 + 1] - bbox[2 * i + 1] for i in range(3))
-    dataset_output = file.create_dataset(str(idx), shape)
+    # shape = (1 + bbox[2 * i + 1 + 1] - bbox[2 * i + 1] for i in range(3))
 
-    simple_chunk(None, [vol], chunk_size, _chunk_write_seg, dataset_output, bbox)
-    return dataset_output
+    simple_chunk(
+        None,
+        [vol],
+        chunk_size,
+        _chunk_write_seg,
+        num_workers,
+        pass_params=True,
+        output=output,
+        bbox=bbox,
+        bbox_in=bbox,
+    )
+    return output
 
 
 if __name__ == "__main__":
