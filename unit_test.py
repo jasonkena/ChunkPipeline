@@ -6,11 +6,20 @@ import cc3d
 import os
 
 from imu.io import get_bb_all3d
+import opensimplex
+import edt
+from chunk_sphere import get_dt
+
+
+def generate_simplex_noise(shape, feature_scale):
+    idx = [np.linspace(0, 1 * feature_scale, i) for i in shape]
+    return opensimplex.noise3array(*idx)
 
 
 class ChunkTest(unittest.TestCase):
     def setUp(self):
         np.random.seed(0)
+        opensimplex.seed(0)
         try:
             os.remove("test.hdf5")
         except:
@@ -26,8 +35,8 @@ class ChunkTest(unittest.TestCase):
         gt = input1 > input2
 
         f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input1", shape, dtype="f")[:] = input1
-        f.create_dataset("input2", shape, dtype="f")[:] = input2
+        f.create_dataset("input1", data=input1)
+        f.create_dataset("input2", data=input2)
         f.create_dataset("output", shape, dtype="f"),
 
         for pad in ["zero", "extend", "half_extend", False]:
@@ -35,9 +44,8 @@ class ChunkTest(unittest.TestCase):
                 f.get("output"),
                 [f.get("input1"), f.get("input2")],
                 chunk_size,
-                pad,
-                False,
                 lambda x, y: x > y,
+                pad=pad,
             )
             print(f"pad method: {pad}")
             self.assertTrue(np.array_equal(output[:], gt))
@@ -50,20 +58,21 @@ class ChunkTest(unittest.TestCase):
         gt = get_bb_all3d(input)
 
         f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input", shape, dtype="i")[:] = input
+        f.create_dataset("input", data=input)
 
         output = chunk.chunk_bbox(f.get("input"), chunk_size)
         self.assertTrue(np.array_equal(output, gt))
 
     def test_cc3d(self):
         shape = (100, 100, 100)
+        return
         chunk_size = (9, 8, 7)
         connectivity = 26
 
-        input = np.random.rand(*shape) > 0.5
+        input = np.random.rand(*shape) > 0.8
 
         f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input", shape, dtype="u1")[:] = input
+        f.create_dataset("input", data=input)
         f.create_dataset("output", shape, dtype="i")
         group_cache = f.create_group("cache")
 
@@ -74,10 +83,42 @@ class ChunkTest(unittest.TestCase):
 
         # largest_k instead of connected_components, because of ordering by voxel_count
         gt, gt_N = cc3d.largest_k(input, k=N, return_N=True, connectivity=connectivity)
+        statistics = np.sort(cc3d.statistics(gt)["voxel_counts"])[::-1]
         print(f"N: {N}, gt_N: {gt_N}")
 
         self.assertTrue(N == gt_N)
-        self.assertTrue(np.array_equal(output[0][:], gt))
+        # cannot evaluate whether cc3d is equal because ordering cannot be guaranteed
+        self.assertTrue(np.array_equal(output[1], statistics))
+
+    def test_dt(self):
+        shape = (100, 100, 100)
+        # NOTE: CHUNK SIZE NOT ACCESSED
+        chunk_size = (1, 1, 1)
+        # chunk_size = (9, 8, 7)
+        anisotropy = (30, 6, 6)
+        threshold = 0
+        input = generate_simplex_noise(shape, 0.1)  # > 0 #np.random.rand(*shape) > 0.5
+        input = input > input.mean()
+
+        f = h5py.File("test.hdf5", "w")
+        f.create_dataset("input", data=input)
+        f.create_dataset("output", shape, dtype="f")
+
+        output = get_dt(f.get("output"), f.get("input"), anisotropy, False, threshold)
+
+        # largest_k instead of connected_components, because of ordering by voxel_count
+        gt = edt.edt(
+            input,
+            anisotropy=anisotropy[::-1],
+            black_border=False,
+            order="C"
+            if input.flags["C_CONTIGUOUS"]
+            else "F",  # depends if Fortran contiguous or not
+            parallel=0,  # max CPU
+        )
+
+        __import__("pdb").set_trace()
+        self.assertTrue(np.array_equal(output[:], gt))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 import numpy as np
 import h5py
-from imu.io import get_bb_all3d
+import chunk
+from settings import *
 
-file = np.array(h5py.File("./den_ruilin_v2_16nm.h5").get("main")[:])
-bbox = get_bb_all3d(file)
+file = h5py.File("./den_ruilin_v2_16nm.h5")
+bbox = chunk.chunk_bbox(file.get("main"), CHUNK_SIZE)
 np.save("bbox.npy", bbox)

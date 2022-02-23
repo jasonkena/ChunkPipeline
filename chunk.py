@@ -5,8 +5,15 @@ from imu.io import get_bb_all3d
 from unionfind import UnionFind
 import itertools
 import cc3d
+from tqdm import tqdm
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 import math
+
+class ChunkDataset(Dataset):
+    def __init__(self, inputs):
+        pass
 
 
 def extend_slices(slices, half, pad_width):
@@ -22,11 +29,7 @@ def extend_slices(slices, half, pad_width):
         for i in range(len(slices))
     )
     left_start = [
-        (
-            pad_width[i]
-            if slices[i].start >= pad_width[i]
-            else slices[i].start
-        )
+        (pad_width[i] if slices[i].start >= pad_width[i] else slices[i].start)
         * (not half)
         for i in range(len(slices))
     ]
@@ -50,6 +53,7 @@ def simple_chunk(
     func,
     pad=False,
     pass_params=False,
+    bbox=False,
     pad_width=(1, 1, 1),
     *args,
     **kwargs,
@@ -61,6 +65,7 @@ def simple_chunk(
     # pad: "zero", "extend", "half_extend" or False value, output will be trimmed
     # zero will always pad each dimension by 2, extend will do the same if not on boundary, half_extend right_extends
     # func, *args, **kwargs: self-explanatory
+    # bbox: inclusive ranges to perform the computation on, of the form [id, z1, z2, y1, y2, x1, x2]
 
     # NOTE: assumes input sizes are all equal and that output size = input size
     # NOTE: func should not overwrite input; just pass same dataset as output
@@ -72,11 +77,25 @@ def simple_chunk(
         shape = dataset_inputs[0].shape
     else:
         shape = dataset_inputs
-    n_iter = [math.ceil(shape[i] / chunk_size[i]) for i in range(3)]
 
-    for z in range(n_iter[0]):
-        for y in range(n_iter[1]):
-            for x in range(n_iter[2]):
+    if bbox is not False:
+        bbox = bbox[1:]
+        ranges = [
+            # takes into account bbox's inclusivity
+            range(
+                math.floor(bbox[2 * i] / chunk_size[i]),
+                math.floor(bbox[2 * i + 1] / chunk_size[i]) + 1,
+            )
+            for i in range(3)
+        ]
+    else:
+        ranges = [range(math.ceil(shape[i] / chunk_size[i])) for i in range(3)]
+
+    pbar = tqdm(total=len(ranges[0]) * len(ranges[1]) * len(ranges[2]))
+    for z in ranges[0]:
+        for y in ranges[1]:
+            for x in ranges[2]:
+                pbar.update()
                 original_slices = np.s_[
                     z * chunk_size[0] : (z + 1) * chunk_size[0],
                     y * chunk_size[1] : (y + 1) * chunk_size[1],
@@ -114,9 +133,10 @@ def simple_chunk(
                 else:
                     dataset_output[original_slices] = output
 
+    pbar.close()
     if isinstance(dataset_output, list):
         dataset_output = np.array(dataset_output, dtype=object)
-        return dataset_output.reshape(*n_iter)
+        return dataset_output.reshape(*[len(i) for i in ranges])
     return dataset_output
 
 
@@ -350,6 +370,21 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
     )
     return partial_cc3d, voxel_counts
 
+
+# def _chunk_write_seg(z, y, x, chunk_size, vol, dataset_output, bbox):
+#     # NOTE: will need to rewrite this to implement parallelism
+#     read_slice = slice(np.max())
+#     z_idx, y_idx, x_idx = z*chunk
+#     
+#     
+# def get_seg(file, vol, bbox, dtype, chunk_size):
+#     idx = bbox[0]
+#     bbox = bbox[1:]
+#     shape = (1+bbox[2 * i + 1] - bbox[2 * i] for i in range(3))
+#     dataset_output = file.create_dataset(str(idx), shape)
+#
+#     simple_chunk(None)
+#
 
 if __name__ == "__main__":
     # file = h5py.File("./den_ruilin_v2_16nm.h5").get("main")

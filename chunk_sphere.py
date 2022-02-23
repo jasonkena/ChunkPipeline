@@ -8,51 +8,38 @@ from tqdm import tqdm
 from imu.io import get_bb_all3d
 import os
 
+
 import numpy as np
+import chunk
 from utils import pad_vol
+from settings import *
 
 # NOTE: here naive separation between segments is used: each segment id is processed separately
 # can potentially come up with a way to do it in a chunk-based manner instead of by segments
 # will need to deal with chunk boundaries then
 
 
-def get_boundary(vol):
-    # gets foreground voxels which "touch" background pixels, as defined by a 3x3x3 kernel
-    # vol: 3d volume (with 0 indicating background)
-    # NOTE: this function intentionally ignores anisotropy
-
-    vol = vol.astype(np.bool_)
+def _chunk_get_boundary(vol):
+    vol = vol > 0
     padded_vol = torch.from_numpy(pad_vol(vol, [3, 3, 3]))
     vol = torch.from_numpy(vol)
     boundary = torch.logical_and(
         F.max_pool3d((~padded_vol).float().unsqueeze(0), kernel_size=3, stride=1), vol
     ).squeeze(0)
-
-    assert vol.shape == boundary.shape
     return boundary.numpy()
 
 
-# adapted from https://stackoverflow.com/questions/31400769/bounding-box-of-numpy-array
-def get_bbox(vol):
-    # returns bounds of foreground pixels in volume, see return signature
+def get_boundary(boundary_dataset, vol):
+    # gets foreground voxels which "touch" background pixels, as defined by a 3x3x3 kernel
     # vol: 3d volume (with 0 indicating background)
-    zs = np.any(vol, axis=(1, 2))
-    ys = np.any(vol, axis=(0, 2))
-    xs = np.any(vol, axis=(0, 1))
-    zmin, zmax = np.where(zs)[0][[0, -1]]
-    ymin, ymax = np.where(ys)[0][[0, -1]]
-    xmin, xmax = np.where(xs)[0][[0, -1]]
+    # NOTE: this function intentionally ignores anisotropy
+    # TODO: can prevent double input chunks to full chunk_size; no way to elegantly implement it
 
-    return [zmin, zmax], [ymin, ymax], [xmin, xmax]
+    return chunk.simple_chunk(boundary_dataset, [vol], CHUNK_SIZE, _chunk_get_boundary, pad="extend")
 
 
-def get_dt(vol, anisotropy, black_border):
-    # computes euclidean distance transform (voxel-wise distance to nearest background)
-    # vol: 3d volume (with 0 indicating back)
-    # anisotropy: [z-size, y-size, x-size]
-    # black_border: whether volume boundaries should be treated as foreground or background
+def _get_dt(vol, anisotropy, black_border):
     assert (vol.flags["C_CONTIGUOUS"] + vol.flags["F_CONTIGUOUS"]) == 1
-
     dt = edt.edt(
         vol,
         anisotropy=anisotropy[::-1],
@@ -63,6 +50,27 @@ def get_dt(vol, anisotropy, black_border):
         parallel=0,  # max CPU
     )
     return dt
+
+
+def get_dt(dataset_output, vol, anisotropy, black_border, threshold):
+    # computes euclidean distance transform (voxel-wise distance to nearest background)
+    # vol: 3d volume (with 0 indicating back)
+    # anisotropy: [z-size, y-size, x-size]
+    # black_border: whether volume boundaries should be treated as foreground or background
+    # threshold: edt distance threshold
+    pad_width = [math.ceil(threshold / i) for i in anisotropy]
+
+    return chunk.simple_chunk(
+        dataset_output,
+        [vol],
+        CHUNK_SIZE,
+        _get_dt,
+        pad="extend",
+        pass_params=False,
+        pad_width=pad_width,
+        anisotropy=anisotropy,
+        black_border=black_border,
+    )
 
 
 def get_sphere_bounds(boundary_idx, vals, boundary_inverse, erode_delta, anisotropy):
@@ -127,6 +135,7 @@ def sphere_iteration(expanded, dt, vol, erode_delta, anisotropy):
     # returns newly dilated volume
 
     boundary = get_boundary(expanded)
+    __import__("pdb").set_trace()
     boundary_idx = np.nonzero(boundary)
     vals, boundary_inverse = np.unique(dt[boundary], return_inverse=True)
 
