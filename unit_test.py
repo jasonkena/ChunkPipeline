@@ -73,10 +73,11 @@ class ChunkTest(unittest.TestCase):
         connectivity = 26
         num_workers = 2
 
-        input = np.random.rand(*shape) > 0.8
+        input = np.random.rand(*shape) > 0.5
 
         f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input", data=input)
+        # NOTE: the input has to be be u1 instead of b1 for some reason
+        f.create_dataset("input", data=input, dtype="u1")
         f.create_dataset("output", shape, dtype="i")
         group_cache = f.create_group("cache")
 
@@ -92,7 +93,8 @@ class ChunkTest(unittest.TestCase):
 
         # largest_k instead of connected_components, because of ordering by voxel_count
         gt, gt_N = cc3d.largest_k(input, k=N, return_N=True, connectivity=connectivity)
-        statistics = np.sort(cc3d.statistics(gt)["voxel_counts"])[::-1]
+        statistics = cc3d.statistics(gt)["voxel_counts"]
+        statistics = np.concatenate([[statistics[0]], np.sort(statistics[1:])[::-1]])
         print(f"N: {N}, gt_N: {gt_N}")
 
         self.assertTrue(N == gt_N)
@@ -136,6 +138,8 @@ class ChunkTest(unittest.TestCase):
         )
 
         self.assertTrue(np.array_equal(output[:], gt))
+    # TODO: implement get_seg testing
+    # TODO: implement get_boundary testing
 
 
 if __name__ == "__main__":
