@@ -192,7 +192,8 @@ class ChunkTest(unittest.TestCase):
         output = chunk_argwhere(
             [f.get("input")],
             chunk_size,
-            lambda vol: [vol==bbox[0], None],
+            lambda vol: [vol == bbox[0], None],
+            bbox,
             num_workers,
         )
         output = output[np.lexsort(output.T)]

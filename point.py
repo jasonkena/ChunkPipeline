@@ -24,7 +24,7 @@ def _chunk_argwhere(z, y, x, chunk_size, *args, **kwargs):
     return idx
 
 
-def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, num_workers):
+def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, bbox, num_workers):
     # TODO: implement chunked saving instead of aggregating all indices
     return np.concatenate(
         chunk.simple_chunk(
@@ -34,6 +34,7 @@ def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, num_workers):
             _chunk_argwhere,
             num_workers,
             pass_params=True,
+            bbox=bbox,
             chunk_func=chunk_func,
         ).reshape(-1)
     )
@@ -53,6 +54,12 @@ if __name__ == "__main__":
     for row in bboxes:
         output.create_dataset(
             str(row[0]),
-            data=chunk_argwhere([all.get("main"), spine.get("main")], CHUNK_SIZE, lambda all, spine: chunk_func_spine(all, spine, row[0]), NUM_WORKERS),
+            data=chunk_argwhere(
+                [all.get("main"), spine.get("main")],
+                CHUNK_SIZE,
+                lambda all, spine: chunk_func_spine(all, spine, row[0]),
+                row,
+                NUM_WORKERS,
+            ),
             dtype="uint16",
         )
