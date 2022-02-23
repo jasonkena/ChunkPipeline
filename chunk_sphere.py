@@ -35,7 +35,9 @@ def get_boundary(boundary_dataset, vol):
     # NOTE: this function intentionally ignores anisotropy
     # TODO: can prevent double input chunks to full chunk_size; no way to elegantly implement it
 
-    return chunk.simple_chunk(boundary_dataset, [vol], CHUNK_SIZE, _chunk_get_boundary, pad="extend")
+    return chunk.simple_chunk(
+        boundary_dataset, [vol], CHUNK_SIZE, _chunk_get_boundary, pad="extend"
+    )
 
 
 def _get_dt(vol, anisotropy, black_border):

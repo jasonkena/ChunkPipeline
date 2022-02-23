@@ -11,6 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 
 import math
 
+
 class ChunkDataset(Dataset):
     def __init__(self, inputs):
         pass
@@ -375,8 +376,8 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
 #     # NOTE: will need to rewrite this to implement parallelism
 #     read_slice = slice(np.max())
 #     z_idx, y_idx, x_idx = z*chunk
-#     
-#     
+#
+#
 # def get_seg(file, vol, bbox, dtype, chunk_size):
 #     idx = bbox[0]
 #     bbox = bbox[1:]
