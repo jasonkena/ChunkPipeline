@@ -6,6 +6,7 @@ import cc3d
 import os
 
 from imu.io import get_bb_all3d
+import numba
 import opensimplex
 import edt
 from chunk_sphere import get_dt
@@ -28,6 +29,7 @@ class ChunkTest(unittest.TestCase):
     def test_simple_chunk_output(self):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
+        num_workers = 2
 
         input1 = np.random.rand(*shape)
         input2 = np.random.rand(*shape)
@@ -45,6 +47,7 @@ class ChunkTest(unittest.TestCase):
                 [f.get("input1"), f.get("input2")],
                 chunk_size,
                 lambda x, y: x > y,
+                num_workers,
                 pad=pad,
             )
             print(f"pad method: {pad}")
@@ -53,6 +56,7 @@ class ChunkTest(unittest.TestCase):
     def test_chunk_bbox(self):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
+        num_workers = 2
 
         input = np.random.randint(0, 10, shape)
         gt = get_bb_all3d(input)
@@ -60,14 +64,14 @@ class ChunkTest(unittest.TestCase):
         f = h5py.File("test.hdf5", "w")
         f.create_dataset("input", data=input)
 
-        output = chunk.chunk_bbox(f.get("input"), chunk_size)
+        output = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)
         self.assertTrue(np.array_equal(output, gt))
 
     def test_cc3d(self):
         shape = (100, 100, 100)
-        return
         chunk_size = (9, 8, 7)
         connectivity = 26
+        num_workers = 2
 
         input = np.random.rand(*shape) > 0.8
 
@@ -77,7 +81,12 @@ class ChunkTest(unittest.TestCase):
         group_cache = f.create_group("cache")
 
         output = chunk.chunk_cc3d(
-            f.get("output"), f.get("input"), group_cache, chunk_size, connectivity
+            f.get("output"),
+            f.get("input"),
+            group_cache,
+            chunk_size,
+            connectivity,
+            num_workers,
         )
         N = output[1].shape[0] - 1
 
@@ -92,7 +101,8 @@ class ChunkTest(unittest.TestCase):
 
     def test_dt(self):
         shape = (100, 100, 100)
-        # NOTE: CHUNK SIZE NOT ACCESSED
+        num_workers = 2
+        # NOTE: NOTE: NOTE: CHUNK SIZE NOT ACCESSED
         chunk_size = (1, 1, 1)
         # chunk_size = (9, 8, 7)
         anisotropy = (30, 6, 6)
@@ -104,7 +114,15 @@ class ChunkTest(unittest.TestCase):
         f.create_dataset("input", data=input)
         f.create_dataset("output", shape, dtype="f")
 
-        output = get_dt(f.get("output"), f.get("input"), anisotropy, False, threshold)
+        output = get_dt(
+            f.get("output"),
+            f.get("input"),
+            chunk_size,
+            anisotropy,
+            False,
+            threshold,
+            num_workers,
+        )
 
         # largest_k instead of connected_components, because of ordering by voxel_count
         gt = edt.edt(
@@ -117,7 +135,6 @@ class ChunkTest(unittest.TestCase):
             parallel=0,  # max CPU
         )
 
-        __import__("pdb").set_trace()
         self.assertTrue(np.array_equal(output[:], gt))
 
 

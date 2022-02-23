@@ -29,14 +29,19 @@ def _chunk_get_boundary(vol):
     return boundary.numpy()
 
 
-def get_boundary(boundary_dataset, vol):
+def get_boundary(boundary_dataset, vol, num_workers):
     # gets foreground voxels which "touch" background pixels, as defined by a 3x3x3 kernel
     # vol: 3d volume (with 0 indicating background)
     # NOTE: this function intentionally ignores anisotropy
     # TODO: can prevent double input chunks to full chunk_size; no way to elegantly implement it
 
     return chunk.simple_chunk(
-        boundary_dataset, [vol], CHUNK_SIZE, _chunk_get_boundary, pad="extend"
+        boundary_dataset,
+        [vol],
+        CHUNK_SIZE,
+        _chunk_get_boundary,
+        num_workers,
+        pad="extend",
     )
 
 
@@ -54,7 +59,9 @@ def _get_dt(vol, anisotropy, black_border):
     return dt
 
 
-def get_dt(dataset_output, vol, anisotropy, black_border, threshold):
+def get_dt(
+    dataset_output, vol, chunk_size, anisotropy, black_border, threshold, num_workers
+):
     # computes euclidean distance transform (voxel-wise distance to nearest background)
     # vol: 3d volume (with 0 indicating back)
     # anisotropy: [z-size, y-size, x-size]
@@ -65,8 +72,9 @@ def get_dt(dataset_output, vol, anisotropy, black_border, threshold):
     return chunk.simple_chunk(
         dataset_output,
         [vol],
-        CHUNK_SIZE,
+        chunk_size,
         _get_dt,
+        num_workers,
         pad="extend",
         pass_params=False,
         pad_width=pad_width,

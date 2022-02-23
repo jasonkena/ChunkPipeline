@@ -12,11 +12,6 @@ from torch.utils.data import Dataset, DataLoader
 import math
 
 
-class ChunkDataset(Dataset):
-    def __init__(self, inputs):
-        pass
-
-
 def extend_slices(slices, half, pad_width):
     # computes slices to extend slice to include 1 neighboring voxel, and corresponding slice to undo it, restoring original size
     # slices: input slices from np.s_
@@ -47,11 +42,55 @@ def extend_slices(slices, half, pad_width):
     return new_slices, shrink_slices
 
 
+class ChunkDataset(Dataset):
+    def __init__(self, dataset_inputs, zyx_idx, chunk_size, pad, pad_width):
+        self.dataset_inputs = dataset_inputs
+        self.zyx_idx = zyx_idx
+        self.chunk_size = chunk_size
+        self.pad = pad
+        self.pad_width = pad_width
+
+    def __len__(self):
+        return len(self.zyx_idx)
+
+    def __getitem__(self, idx):
+        # TODO: rewrite func to enable asynchronous processing (e.g., UnionFind merging), now limited to doing multiprocessing on input
+        z, y, x = self.zyx_idx[idx]
+        original_slices = np.s_[
+            z * self.chunk_size[0] : (z + 1) * self.chunk_size[0],
+            y * self.chunk_size[1] : (y + 1) * self.chunk_size[1],
+            x * self.chunk_size[2] : (x + 1) * self.chunk_size[2],
+        ]
+        if self.pad == "extend" or self.pad == "half_extend":
+            slices, shrink_slices = extend_slices(
+                original_slices, self.pad == "half_extend", self.pad_width
+            )
+        else:
+            slices = original_slices
+            shrink_slices = None
+
+        if isinstance(self.dataset_inputs, list):
+            inputs = [i[slices] for i in self.dataset_inputs]
+        else:
+            inputs = []
+        if self.pad == "zero":
+            inputs = [pad_vol(i, [j * 2 + 1 for j in self.pad_width]) for i in inputs]
+        return {
+            "z": z,
+            "y": y,
+            "x": x,
+            "inputs": inputs,
+            "shrink_slices": shrink_slices,
+            "original_slices": original_slices,
+        }
+
+
 def simple_chunk(
     dataset_output,
     dataset_inputs,
     chunk_size,
     func,
+    num_workers,
     pad=False,
     pass_params=False,
     bbox=False,
@@ -92,49 +131,42 @@ def simple_chunk(
     else:
         ranges = [range(math.ceil(shape[i] / chunk_size[i])) for i in range(3)]
 
-    pbar = tqdm(total=len(ranges[0]) * len(ranges[1]) * len(ranges[2]))
+    zyx_idx = []
     for z in ranges[0]:
         for y in ranges[1]:
             for x in ranges[2]:
-                pbar.update()
-                original_slices = np.s_[
-                    z * chunk_size[0] : (z + 1) * chunk_size[0],
-                    y * chunk_size[1] : (y + 1) * chunk_size[1],
-                    x * chunk_size[2] : (x + 1) * chunk_size[2],
-                ]
-                if pad == "extend" or pad == "half_extend":
-                    slices, shrink_slices = extend_slices(
-                        original_slices, pad == "half_extend", pad_width
-                    )
-                else:
-                    slices = original_slices
+                zyx_idx.append([z, y, x])
 
-                if isinstance(dataset_inputs, list):
-                    inputs = [i[slices] for i in dataset_inputs]
-                else:
-                    inputs = []
-                if pad == "zero":
-                    inputs = [
-                        pad_vol(i, [j * 2 + 1 for j in pad_width]) for i in inputs
-                    ]
+    chunk_dataset = ChunkDataset(dataset_inputs, zyx_idx, chunk_size, pad, pad_width)
+    # defaults to prefetching 2*num_workers; do not collate
+    chunk_dataloader = DataLoader(
+        chunk_dataset, batch_size=1, num_workers=num_workers, collate_fn=lambda x: x[0]
+    )
+    for inputs in tqdm(chunk_dataloader):
+        if pass_params:
+            output = func(
+                inputs["z"],
+                inputs["y"],
+                inputs["x"],
+                chunk_size,
+                *inputs["inputs"],
+                *args,
+                **kwargs,
+            )
+        else:
+            output = func(*inputs["inputs"], *args, **kwargs)
 
-                if pass_params:
-                    output = func(z, y, x, chunk_size, *inputs, *args, **kwargs)
-                else:
-                    output = func(*inputs, *args, **kwargs)
+        if not isinstance(dataset_output, list):
+            if pad == "zero":
+                output = output[1:-1, 1:-1, 1:-1]
+            elif pad == "extend" or pad == "half_extend":
+                output = output[inputs["shrink_slices"]]
 
-                if not isinstance(dataset_output, list):
-                    if pad == "zero":
-                        output = output[1:-1, 1:-1, 1:-1]
-                    elif pad == "extend" or pad == "half_extend":
-                        output = output[shrink_slices]
+        if isinstance(dataset_output, list):
+            dataset_output.append(output)
+        else:
+            dataset_output[inputs["original_slices"]] = output
 
-                if isinstance(dataset_output, list):
-                    dataset_output.append(output)
-                else:
-                    dataset_output[original_slices] = output
-
-    pbar.close()
     if isinstance(dataset_output, list):
         dataset_output = np.array(dataset_output, dtype=object)
         return dataset_output.reshape(*[len(i) for i in ranges])
@@ -157,7 +189,7 @@ def _chunk_bbox(z, y, x, chunk_size, vol):
     return bboxes
 
 
-def chunk_bbox(vol, chunk_size):
+def chunk_bbox(vol, chunk_size, num_workers):
     # calculate bbox in chunks
     # vol: h5 dataset used as input
     # chunk_size: [size_z, size_y, size_x]
@@ -165,7 +197,9 @@ def chunk_bbox(vol, chunk_size):
 
     # restore original coordinates
     # [z,y,x], then [seg id, zmin, zmax, etc]
-    bboxes = simple_chunk(None, [vol], chunk_size, _chunk_bbox, pass_params=True)
+    bboxes = simple_chunk(
+        None, [vol], chunk_size, _chunk_bbox, num_workers, pass_params=True
+    )
     bboxes = np.concatenate(bboxes.reshape(-1).tolist(), axis=0)
     bboxes = bboxes[np.argsort(bboxes[:, 0])]
     assert not np.any(bboxes[:, 0] == 0)
@@ -263,7 +297,7 @@ def _chunk_half_extend_cc3d(
     return connected_components
 
 
-def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
+def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_workers):
     # perform chunked cc3d calculations
     # dataset_output: output dataset to write to; if None, will write to nested array
     # vol: h5 dataset used as input
@@ -280,6 +314,7 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
         dataset_cache,
         vol.shape,
         chunk_size,
+        num_workers,
         lambda z, y, x, chunk_size: np.array([z, y, x]).reshape(1, 1, -1),
         pass_params=True,
     )
@@ -294,6 +329,7 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
         dataset_output,
         [vol, zyx_idx],
         chunk_size,
+        num_workers,
         _chunk_half_extend_cc3d,
         pad="half_extend",
         pass_params=True,
@@ -309,6 +345,7 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity):
         [partial_cc3d],
         chunk_size,
         lambda vol: cc3d.statistics(vol.astype(np.uint64)),
+        num_workers,
     )
 
     # get adjacencies from neighboring chunks also initialize remapping
