@@ -314,8 +314,8 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         dataset_cache,
         vol.shape,
         chunk_size,
-        num_workers,
         lambda z, y, x, chunk_size: np.array([z, y, x]).reshape(1, 1, -1),
+        num_workers,
         pass_params=True,
     )
 
@@ -329,8 +329,8 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         dataset_output,
         [vol, zyx_idx],
         chunk_size,
-        num_workers,
         _chunk_half_extend_cc3d,
+        num_workers,
         pad="half_extend",
         pass_params=True,
         mask=mask,
@@ -356,6 +356,7 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         [partial_cc3d],
         chunk_size,
         _chunk_cc3d_neighbors,
+        num_workers,
         pad="half_extend",
         pass_params=True,
         partial_statistics=partial_statistics,
@@ -403,26 +404,47 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         [partial_cc3d],
         chunk_size,
         _chunk_remap_cc3d,
+        num_workers,
         pass_params=True,
         remapping=remapping,
     )
     return partial_cc3d, voxel_counts
 
 
-# def _chunk_write_seg(z, y, x, chunk_size, vol, dataset_output, bbox):
-#     # NOTE: will need to rewrite this to implement parallelism
-#     read_slice = slice(np.max())
-#     z_idx, y_idx, x_idx = z*chunk
-#
-#
-# def get_seg(file, vol, bbox, dtype, chunk_size):
-#     idx = bbox[0]
-#     bbox = bbox[1:]
-#     shape = (1+bbox[2 * i + 1] - bbox[2 * i] for i in range(3))
-#     dataset_output = file.create_dataset(str(idx), shape)
-#
-#     simple_chunk(None)
-#
+def _chunk_write_seg(z, y, x, chunk_size, vol, dataset_output, bbox):
+    # note: will need to rewrite this to implement parallelism
+    idx = [z, y, x]
+    # extra +1 due to bbox format
+    read_slices = [
+        slice(
+            np.max(0, bbox[2 * i + 1] - idx[i] * chunk_size[i]),
+            np.min(chunk_size[i] - 1, bbox[2 * i + 1 + 1] - idx[i] * chunk_size[2]) + 1,
+        )
+        for i in range(3)
+    ]
+    write_slices = [
+        slice(
+            np.max(idx[i] * chunk_size[i] - bbox[2 * i + 1], 0),
+            np.min(
+                idx[i] * (chunk_size[i] + 1) - bbox[2 * i + 1 + 1] - 1,
+                bbox[2 * i + 1 + 1] - bbox[2 * i + 1],
+            )
+            + 1,
+        )
+        for i in range(3)
+    ]
+    dataset_output[write_slices] = (vol == bbox[0])[read_slices]
+
+
+def get_seg(file, vol, bbox, dtype, chunk_size, num_workers):
+    # NOTE: need to reimplement this for func parallelism
+    # extra +1 due to bbox format
+    shape = (1 + bbox[2 * i + 1 + 1] - bbox[2 * i + 1] for i in range(3))
+    dataset_output = file.create_dataset(str(idx), shape)
+
+    simple_chunk(None, [vol], chunk_size, _chunk_write_seg, dataset_output, bbox)
+    return dataset_output
+
 
 if __name__ == "__main__":
     # file = h5py.File("./den_ruilin_v2_16nm.h5").get("main")

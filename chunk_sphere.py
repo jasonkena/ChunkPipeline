@@ -46,7 +46,9 @@ def get_boundary(boundary_dataset, vol, num_workers):
 
 
 def _get_dt(vol, anisotropy, black_border):
-    assert (vol.flags["C_CONTIGUOUS"] + vol.flags["F_CONTIGUOUS"]) == 1
+    if not (vol.flags["C_CONTIGUOUS"] + vol.flags["F_CONTIGUOUS"]) == 1:
+        vol = np.ascontiguousarray(vol)
+
     dt = edt.edt(
         vol,
         anisotropy=anisotropy[::-1],

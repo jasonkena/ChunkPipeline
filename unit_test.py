@@ -6,13 +6,16 @@ import cc3d
 import os
 
 from imu.io import get_bb_all3d
-import numba
 import opensimplex
 import edt
 from chunk_sphere import get_dt
 
 
 def generate_simplex_noise(shape, feature_scale):
+    try:
+        import numba
+    except ImportError:
+        print("Please install numba to accelerate simplex_noise generation")
     idx = [np.linspace(0, 1 * feature_scale, i) for i in shape]
     return opensimplex.noise3array(*idx)
 
@@ -102,7 +105,7 @@ class ChunkTest(unittest.TestCase):
         self.assertTrue(np.array_equal(output[1], statistics))
 
     def test_dt(self):
-        shape = (100, 100, 100)
+        shape = (10, 10, 10)
         num_workers = 2
         # NOTE: NOTE: NOTE: CHUNK SIZE NOT ACCESSED
         chunk_size = (1, 1, 1)
