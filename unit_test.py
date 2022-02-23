@@ -12,7 +12,7 @@ from imu.io import get_bb_all3d
 import opensimplex
 import edt
 from chunk_sphere import get_dt, get_boundary
-from point import chunk_argwhere_seg
+from point import chunk_argwhere
 
 
 def generate_simplex_noise(shape, feature_scale):
@@ -187,11 +187,12 @@ class ChunkTest(unittest.TestCase):
 
         # get first row
         bbox = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)[0]
+        bbox[0] = 1
 
-        output = chunk_argwhere_seg(
-            f.get("input"),
+        output = chunk_argwhere(
+            [f.get("input")],
             chunk_size,
-            bbox,
+            lambda vol: [vol==bbox[0], None],
             num_workers,
         )
         output = output[np.lexsort(output.T)]
