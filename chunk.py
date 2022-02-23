@@ -147,11 +147,15 @@ def simple_chunk(
     )
     for inputs in tqdm(chunk_dataloader):
         if pass_params:
+            params = {
+                "z": inputs["z"],
+                "y": inputs["y"],
+                "x": inputs["x"],
+                "chunk_size": chunk_size,
+                "shrink_slices": inputs["shrink_slices"],
+            }
             output = func(
-                inputs["z"],
-                inputs["y"],
-                inputs["x"],
-                chunk_size,
+                params,
                 *inputs["inputs"],
                 *args,
                 **kwargs,
@@ -182,7 +186,8 @@ def get_is_first_unique(array):
     return np.pad(array[:-1], (1, 0)) != array
 
 
-def _chunk_bbox(z, y, x, chunk_size, vol):
+def _chunk_bbox(params, vol):
+    z,y,x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
     # add offset to bounding boxes based on zyx
     bboxes = get_bb_all3d(vol)
     bboxes[:, 1:3] += chunk_size[0] * z
@@ -221,18 +226,15 @@ def chunk_bbox(vol, chunk_size, num_workers):
 
 
 def _chunk_cc3d_neighbors(
-    z,
-    y,
-    x,
-    chunk_size,
+    params,
     partial_cc3d,
     partial_statistics,
     uf,
-    connectivity,
     remapping,
     group_cache,
     mask,
 ):
+    z,y,x = [params[i] for i in ["z", "y", "x"]]
     # performs unions on connected components based on neighbors
     mask = mask[
         : partial_cc3d.shape[0], : partial_cc3d.shape[1], : partial_cc3d.shape[2]
@@ -272,13 +274,15 @@ def _chunk_cc3d_neighbors(
         uf.union(tuple(result[i]), tuple(result[i - 1]))
 
 
-def _chunk_remap_cc3d(z, y, x, chunk_size, partial_cc3d, remapping):
+def _chunk_remap_cc3d(params, partial_cc3d, remapping):
+    z,y,x= [params[i] for i in ["z", "y", "x"]]
     return remapping[(z, y, x)][partial_cc3d]
 
 
 def _chunk_half_extend_cc3d(
-    z, y, x, chunk_size, vol, zyx_idx, mask, group_cache, connectivity
+    params, vol, zyx_idx, mask, group_cache, connectivity
 ):
+    z,y,x= [params[i] for i in ["z", "y", "x"]]
     connected_components = cc3d.connected_components(
         vol != 0, connectivity=connectivity
     )
@@ -317,7 +321,7 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         dataset_cache,
         vol.shape,
         chunk_size,
-        lambda z, y, x, chunk_size: np.array([z, y, x]).reshape(1, 1, -1),
+        lambda params : np.array([params["z"], params["y"], params["x"]]).reshape(1, 1, -1),
         num_workers,
         pass_params=True,
     )
@@ -364,7 +368,6 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         pass_params=True,
         partial_statistics=partial_statistics,
         uf=uf,
-        connectivity=connectivity,
         remapping=remapping,
         group_cache=group_cache,
         mask=mask,
@@ -414,8 +417,9 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
     return partial_cc3d, voxel_counts
 
 
-def _chunk_write_seg(z, y, x, chunk_size, vol, output, bbox_in):
-    # note: will need to rewrite this to implement parallelism
+def _chunk_write_seg(params, vol, output, bbox_in):
+    z,y,x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
+    # NOTE: will need to rewrite this to implement parallelism
     idx = [z, y, x]
     # extra +1 due to bbox format
     read_slices = [

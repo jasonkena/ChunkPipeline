@@ -6,7 +6,8 @@ import os
 from settings import *
 
 
-def _chunk_argwhere(z, y, x, chunk_size, *args, **kwargs):
+def _chunk_argwhere(params, *args, **kwargs):
+    z,y,x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
     # kwargs must contain func, and it must return 2 things: binary mask and another (array or None)
     # returns indices where vol is true
     new_kwargs = kwargs.copy()
@@ -52,6 +53,11 @@ if __name__ == "__main__":
     output = h5py.File("test_point.h5", "w")
 
     for row in bboxes:
+        output.create_dataset(
+            "cache",
+            shape=all.get("main").shape,
+            dtype="u1",
+        )
         output.create_dataset(
             str(row[0]),
             data=chunk_argwhere(
