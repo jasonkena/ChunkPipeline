@@ -113,12 +113,14 @@ def simple_chunk(
     # NOTE: func should not overwrite input; just pass same dataset as output
 
     assert pad in ["zero", "extend", "half_extend", False]
-    if dataset_output == None:
-        dataset_output = []
     if isinstance(dataset_inputs, list):
         shape = dataset_inputs[0].shape
     else:
         shape = dataset_inputs
+    if dataset_output == None:
+        dataset_output = []
+    else:
+        assert dataset_output.shape[:len(shape)] == shape
 
     if bbox is not False:
         bbox = bbox[1:]
@@ -164,7 +166,11 @@ def simple_chunk(
 
         if not isinstance(dataset_output, list):
             if pad == "zero":
-                output = output[1:-1, 1:-1, 1:-1]
+                output = output[
+                    pad_width[0] : -pad_width[0],
+                    pad_width[1] : -pad_width[1],
+                    pad_width[2] : -pad_width[2],
+                ]
             elif pad == "extend" or pad == "half_extend":
                 output = output[inputs["shrink_slices"]]
 

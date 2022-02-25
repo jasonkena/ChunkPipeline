@@ -62,17 +62,17 @@ def main(input_path, id):
     if os.path.exists(output_file):
         return
 
-    np.save(
-        output_file,
-        chunk_argwhere(
-            [all.get("main"), spine.get("main")],
-            CHUNK_SIZE,
-            lambda params, all, spine: chunk_func_spine(params, all, spine, row[0]),
-            row,
-            "extend",
-            NUM_WORKERS,
-        ),
-    )
+    output = chunk_argwhere(
+        [all.get("main"), spine.get("main")],
+        CHUNK_SIZE,
+        lambda params, all, spine: chunk_func_spine(params, all, spine, row[0]),
+        row,
+        "extend",
+        NUM_WORKERS,
+    ).astype(np.uint16)
+    assert (0 <= np.min(output)) and (np.max(output) <= np.iinfo(np.uint16))
+    output = output.astype(np.uint16)
+    np.save(output_file, output)
 
 
 if __name__ == "__main__":

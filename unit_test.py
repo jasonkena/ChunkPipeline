@@ -11,8 +11,8 @@ from utils import pad_vol
 from imu.io import get_bb_all3d
 import opensimplex
 import edt
-from chunk_sphere import get_dt, get_boundary
-from point import chunk_argwhere
+from chunk_sphere import get_dt, get_boundary, _chunk_get_boundary, _get_dt
+from point import chunk_argwhere, chunk_func_spine
 
 
 def generate_simplex_noise(shape, feature_scale):
@@ -20,7 +20,7 @@ def generate_simplex_noise(shape, feature_scale):
         import numba
     except ImportError:
         print("Please install numba to accelerate simplex_noise generation")
-    idx = [np.linspace(0, 1 * feature_scale, i) for i in shape]
+    idx = [np.linspace(0, 1 * feature_scale, i) for i in shape[::-1]]
     return opensimplex.noise3array(*idx)
 
 
@@ -36,6 +36,7 @@ class ChunkTest(unittest.TestCase):
     def test_simple_chunk_output(self):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
+        pad_width = (1, 2, 3)
         num_workers = 2
 
         input1 = np.random.rand(*shape)
@@ -56,6 +57,7 @@ class ChunkTest(unittest.TestCase):
                 lambda x, y: x > y,
                 num_workers,
                 pad=pad,
+                pad_width=pad_width,
             )
             print(f"pad method: {pad}")
             self.assertTrue(np.array_equal(output[:], gt))
@@ -80,7 +82,7 @@ class ChunkTest(unittest.TestCase):
         connectivity = 26
         num_workers = 2
 
-        input = np.random.rand(*shape) > 0.5
+        input = np.random.rand(*shape) > 0.8
 
         f = h5py.File("test.hdf5", "w")
         # NOTE: the input has to be be u1 instead of b1 for some reason
@@ -108,14 +110,25 @@ class ChunkTest(unittest.TestCase):
         # cannot evaluate whether cc3d is equal because ordering cannot be guaranteed
         self.assertTrue(np.array_equal(output[1], statistics))
 
+    def test_dt_sanity(self):
+        anisotropy = (1, 2, 3)
+        pad = 5
+        input = np.ones((pad * 2 + 1, pad * 2 + 1, pad * 2 + 1))
+        input[pad, pad, pad] = 0
+
+        output = _get_dt(input, anisotropy, False)
+
+        assert output[0, pad, pad] == anisotropy[0] * pad
+        assert output[pad, 0, pad] == anisotropy[1] * pad
+        assert output[pad, pad, 0] == anisotropy[2] * pad
+
     def test_dt(self):
-        shape = (10, 10, 10)
         num_workers = 2
-        # NOTE: NOTE: NOTE: CHUNK SIZE NOT ACCESSED
-        chunk_size = (1, 1, 1)
-        # chunk_size = (9, 8, 7)
-        anisotropy = (30, 6, 6)
-        threshold = 0
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+        anisotropy = (1, 2, 3)
+        threshold = 40
+
         input = generate_simplex_noise(shape, 0.1)  # > 0 #np.random.rand(*shape) > 0.5
         input = input > input.mean()
 
@@ -132,19 +145,16 @@ class ChunkTest(unittest.TestCase):
             threshold,
             num_workers,
         )
+        output_idx = output[:] <= threshold
 
-        # largest_k instead of connected_components, because of ordering by voxel_count
-        gt = edt.edt(
-            input,
-            anisotropy=anisotropy[::-1],
-            black_border=False,
-            order="C"
-            if input.flags["C_CONTIGUOUS"]
-            else "F",  # depends if Fortran contiguous or not
-            parallel=0,  # max CPU
-        )
+        gt = _get_dt(f.get("input")[:], anisotropy, False)
+        gt_idx = gt <= threshold
 
-        self.assertTrue(np.array_equal(output[:], gt))
+        num_errors = np.logical_xor(output_idx, gt_idx)
+        print(f"Errors: {np.sum(num_errors)}")
+
+        self.assertTrue(np.array_equal(output[:][output_idx], gt[gt_idx]))
+        self.assertTrue(np.array_equal(output_idx, gt_idx))
 
     def test_get_boundary(self):
         shape = (100, 100, 100)
@@ -180,7 +190,7 @@ class ChunkTest(unittest.TestCase):
         num_workers = 2
 
         input = np.zeros(shape, dtype=int)
-        input[50:60, 50:60, 50:60] = np.random.randint(0, 10, (10, 10, 10))
+        input[40:60, 40:60, 40:60] = np.random.randint(0, 10, (20, 20, 20))
 
         f = h5py.File("test.hdf5", "w")
         f.create_dataset("input", data=input)
@@ -204,6 +214,44 @@ class ChunkTest(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output[:], idx))
 
+    def test_argwhere_spine(self):
+        # test both argwhere_seg and simple_chunk's bbox
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+        num_workers = 2
+
+        all = np.zeros(shape, dtype=int)
+        spine = np.random.randint(0, 10, shape, dtype=int)
+        all[40:60, 40:60, 40:60] = np.random.randint(0, 10, (20, 20, 20))
+
+        f = h5py.File("test.hdf5", "w")
+        f.create_dataset("all", data=all)
+        f.create_dataset("spine", data=spine)
+
+        # get first row
+        bbox = chunk.chunk_bbox(f.get("all"), chunk_size, num_workers)[0]
+        assert bbox[0] == 1
+
+        output = chunk_argwhere(
+            [f.get("all"), f.get("spine")],
+            chunk_size,
+            lambda params, all, spine: chunk_func_spine(params, all, spine, bbox[0]),
+            bbox,
+            "extend",
+            num_workers,
+        )
+
+        output = output[np.lexsort(output.T)]
+
+        gt = _chunk_get_boundary(all == bbox[0])
+        gt = np.concatenate(
+            [np.argwhere(gt), (spine == bbox[0])[gt].reshape(-1, 1)], axis=1
+        )
+
+        idx = gt[np.lexsort(gt.T)]
+
+        self.assertTrue(np.array_equal(output, idx))
+
     def test_get_seg(self):
         # test both argwhere_seg and simple_chunk's bbox
         shape = (100, 100, 100)
@@ -211,7 +259,7 @@ class ChunkTest(unittest.TestCase):
         num_workers = 2
 
         input = np.zeros(shape, dtype=int)
-        input[50:60, 50:60, 50:60] = np.random.randint(0, 10, (10, 10, 10))
+        input[40:60, 40:60, 40:60] = np.random.randint(0, 10, (20, 20, 20))
 
         f = h5py.File("test.hdf5", "w")
         f.create_dataset("input", data=input)

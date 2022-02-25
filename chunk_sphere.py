@@ -46,18 +46,18 @@ def get_boundary(boundary_dataset, vol, chunk_size, num_workers):
 
 
 def _get_dt(vol, anisotropy, black_border):
-    if not (vol.flags["C_CONTIGUOUS"] + vol.flags["F_CONTIGUOUS"]) == 1:
+    if not vol.flags["C_CONTIGUOUS"]:
         vol = np.ascontiguousarray(vol)
 
     dt = edt.edt(
         vol,
-        anisotropy=anisotropy[::-1],
+        anisotropy=anisotropy,
         black_border=black_border,
-        order="C"
-        if vol.flags["C_CONTIGUOUS"]
-        else "F",  # depends if Fortran contiguous or not
+        order="C",  # was C
         parallel=0,  # max CPU
     )
+    assert not np.isnan(dt).any()
+
     return dt
 
 
