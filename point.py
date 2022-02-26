@@ -54,7 +54,7 @@ def main(input_path, id):
         NUM_WORKERS,
     )
     output[:, :3] += np.array([row[1], row[3], row[5]])
-    assert (0 <= np.min(output)) and (np.max(output) <= np.iinfo(np.uint16))
+    assert (0 <= np.min(output)) and (np.max(output) <= np.iinfo(np.uint16).max)
     output = output.astype(np.uint16)
     np.save(output_file, output)
 
