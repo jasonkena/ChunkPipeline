@@ -148,7 +148,6 @@ class ChunkTest(unittest.TestCase):
             anisotropy,
             False,
             threshold,
-            False, # bbox
             num_workers,
         )
         output_idx = output[:] <= threshold
@@ -205,14 +204,23 @@ class ChunkTest(unittest.TestCase):
         bbox = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)[0]
         assert bbox[0] == 1
 
+        f.create_dataset(
+            "seg",
+            shape=(bbox[2] - bbox[1] + 1, bbox[4] - bbox[3] + 1, bbox[6] - bbox[5] + 1),
+            dtype="u1",
+        )
+        seg = chunk.get_seg(
+            f.get("seg"), f.get("input"), bbox, chunk_size, True, num_workers
+        )
+
         output = chunk.chunk_argwhere(
-            [f.get("input")],
+            [seg],
             chunk_size,
-            lambda params, vol: [vol == bbox[0], None],
-            bbox,
+            lambda params, vol: [vol, None],
             False,
             num_workers,
         )
+        output += np.array([bbox[1], bbox[3], bbox[5]])
         output = output[np.lexsort(output.T)]
 
         idx = np.argwhere(input == bbox[0])
@@ -227,7 +235,7 @@ class ChunkTest(unittest.TestCase):
         num_workers = 2
 
         all = np.zeros(shape, dtype=int)
-        spine = np.random.randint(0, 10, shape, dtype=int)
+        spine = np.random.randint(0, 2, shape, dtype=int)
         all[40:60, 40:60, 40:60] = np.random.randint(0, 10, (20, 20, 20))
 
         f = h5py.File("test.hdf5", "w")
@@ -238,15 +246,31 @@ class ChunkTest(unittest.TestCase):
         bbox = chunk.chunk_bbox(f.get("all"), chunk_size, num_workers)[0]
         assert bbox[0] == 1
 
+        new_all = f.create_dataset(
+            "new_all",
+            shape=(bbox[2] - bbox[1] + 1, bbox[4] - bbox[3] + 1, bbox[6] - bbox[5] + 1),
+            dtype="u1",
+        )
+        new_spine = f.create_dataset(
+            "new_spine",
+            shape=(bbox[2] - bbox[1] + 1, bbox[4] - bbox[3] + 1, bbox[6] - bbox[5] + 1),
+            dtype="int",
+        )
+
+        new_all = chunk.get_seg(
+            new_all, f.get("all"), bbox, chunk_size, True, num_workers
+        )
+        new_spine = chunk.get_seg(
+            new_spine, f.get("spine"), bbox, chunk_size, True, num_workers
+        )
         output = chunk.chunk_argwhere(
-            [f.get("all"), f.get("spine")],
+            [new_all, new_spine],
             chunk_size,
-            lambda params, all, spine: chunk_func_spine(params, all, spine, bbox[0]),
-            bbox,
+            lambda params, all, spine: chunk_func_spine(params, all, spine),
             "extend",
             num_workers,
         )
-
+        output[:, :3] += np.array([bbox[1], bbox[3], bbox[5]])
         output = output[np.lexsort(output.T)]
 
         gt = _chunk_get_boundary(all == bbox[0])[0]
@@ -305,7 +329,7 @@ class ChunkTest(unittest.TestCase):
             dtype="u1",
         )
         seg = chunk.get_seg(
-            f.get("output"), f.get("input"), bbox, chunk_size, num_workers
+            f.get("output"), f.get("input"), bbox, chunk_size, True, num_workers
         )
 
         gt = (

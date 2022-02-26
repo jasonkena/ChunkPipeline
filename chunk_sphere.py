@@ -47,6 +47,8 @@ def get_boundary(boundary_dataset, vol, chunk_size, num_workers):
 
 
 def _get_dt(vol, anisotropy, black_border):
+    # NOTE: might need to pad by one for chunks on borders of input volume
+
     if not vol.flags["C_CONTIGUOUS"]:
         vol = np.ascontiguousarray(vol)
 
@@ -69,7 +71,6 @@ def get_dt(
     anisotropy,
     black_border,
     threshold,
-    bbox,
     num_workers,
 ):
     # computes euclidean distance transform (voxel-wise distance to nearest background)
@@ -88,7 +89,6 @@ def get_dt(
         pad="extend",
         pass_params=False,
         pad_width=pad_width,
-        bbox=bbox,
         anisotropy=anisotropy,
         black_border=black_border,
     )
@@ -155,7 +155,6 @@ def sphere_iteration(
     erode_delta,
     anisotropy,
     chunk_size,
-    bbox,
     num_workers,
 ):
     # performs sphere_iteration on volumes that may already be dilated
@@ -175,7 +174,6 @@ def sphere_iteration(
         [boundary],
         chunk_size,
         lambda params, vol: [vol, None],
-        bbox,
         False,
         num_workers,
     )

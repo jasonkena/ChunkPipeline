@@ -460,7 +460,7 @@ def _chunk_argwhere(params, *args, **kwargs):
     return [idx]
 
 
-def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, bbox, pad, num_workers):
+def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, pad, num_workers):
     # TODO: implement chunked saving instead of aggregating all indices
     return np.concatenate(
         simple_chunk(
@@ -471,41 +471,13 @@ def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, bbox, pad, num_worker
             num_workers,
             pad=pad,
             pass_params=True,
-            bbox=bbox,
             chunk_func=chunk_func,
         ).reshape(-1)
     )
 
 
-def get_bbox_read_slice(idx, chunk_size, bbox_in):
-    # idx: [z,y,x]
-    return [
-        slice(
-            max(0, bbox_in[2 * i + 1] - idx[i] * chunk_size[i]),
-            # NOTE: intentionally doesn't do +1 to end, need to do manually with output of function
-            min(chunk_size[i] - 1, bbox_in[2 * i + 1 + 1] - idx[i] * chunk_size[i]),
-        )
-        for i in range(3)
-    ]
-
-
-def _chunk_unique(params, vol, return_inverse, bbox_in):
-    # NOTE: must take into account shrink_slices which may be null
-    # shrink_slices might be null
-    z, y, x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
-    # NOTE: will need to rewrite this to implement parallelism
-    idx = [z, y, x]
-
-    original_shape = vol.shape
-    # shrink if bbox
-    bbox_slices = get_bbox_read_slice(idx, chunk_size, bbox_in)
-    bbox_slices = np.s_[
-        bbox_slices[0].start : bbox_slices[0].stop + 1,
-        bbox_slices[1].start : bbox_slices[1].stop + 1,
-        bbox_slices[2].start : bbox_slices[2].stop + 1,
-    ]
-
-    vol = vol[bbox_slices]
+def _chunk_unique(params, vol, return_inverse):
+    z, y, x = [params[i] for i in ["z", "y", "x"]]
     shape = vol.shape
 
     output = np.unique(vol, return_inverse=return_inverse)
@@ -513,18 +485,13 @@ def _chunk_unique(params, vol, return_inverse, bbox_in):
     if not return_inverse:
         return [output]
 
-    # TODO: do not hardcode dtype
-    new_indices = np.zeros(original_shape, dtype=np.uint64)
-    # NOTE: shrink_slices might not do what you think it does
-    new_indices[bbox_slices] = output[1].reshape(shape)
-
     return [
         [z, y, x, output[0]],
-        new_indices,
+        output[1].reshape(shape),
     ]
 
 
-def chunk_unique(dataset_input, chunk_size, bbox, return_inverse, num_workers):
+def chunk_unique(dataset_input, chunk_size, return_inverse, num_workers):
     # return_inverse: either None or equal
     # NOTE: will need to rewrite if number of unique values exceed memory
     # simple_chunk(dataset_input, )
@@ -535,9 +502,7 @@ def chunk_unique(dataset_input, chunk_size, bbox, return_inverse, num_workers):
         _chunk_unique,
         num_workers,
         pass_params=True,
-        bbox=bbox,
         return_inverse=(return_inverse is not None),
-        bbox_in=bbox,
     )
     if return_inverse is None:
         unique = output
@@ -559,25 +524,30 @@ def chunk_unique(dataset_input, chunk_size, bbox, return_inverse, num_workers):
     for row in flattened:
         # NOTE: might be more efficient to implement own searchsorted using np.unique, since all inputs are sorted
         remapping[tuple(row[:3].tolist())] = np.searchsorted(final_unique, row[3])
-    __import__('pdb').set_trace()
+    __import__("pdb").set_trace()
 
-    #for i in range()
+    # for i in range()
 
     # NOTE: need to remap input idx, cann't remap remappiung
-    
 
     # TODO: don't hardcode dtype
     max_unique = final_unique.max()
-    remapping = np.zeros(max_unique+1, dtype=np.uint64)
+    remapping = np.zeros(max_unique + 1, dtype=np.uint64)
     remapping[final_unique] = np.arange(max_unique)
 
 
-def _chunk_write_seg(params, vol, output, bbox_in):
+def _chunk_write_seg(params, vol, output, bbox_in, filter_id):
     z, y, x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
     # NOTE: will need to rewrite this to implement parallelism
     idx = [z, y, x]
     # extra +1 due to bbox format
-    read_slices = get_bbox_read_slice(idx, chunk_size, bbox_in)
+    read_slices = [
+        slice(
+            max(0, bbox_in[2 * i + 1] - idx[i] * chunk_size[i]),
+            min(chunk_size[i] - 1, bbox_in[2 * i + 1 + 1] - idx[i] * chunk_size[i]),
+        )
+        for i in range(3)
+    ]
     distances = [i.stop - i.start for i in read_slices]
     write_slices = [
         slice(
@@ -586,18 +556,20 @@ def _chunk_write_seg(params, vol, output, bbox_in):
         )
         for i in range(3)
     ]
+    if filter_id:
+        vol = vol == bbox_in[0]
     output[
         write_slices[0].start : write_slices[0].stop + 1,
         write_slices[1].start : write_slices[1].stop + 1,
         write_slices[2].start : write_slices[2].stop + 1,
-    ] = (vol == bbox_in[0])[
+    ] = vol[
         read_slices[0].start : read_slices[0].stop + 1,
         read_slices[1].start : read_slices[1].stop + 1,
         read_slices[2].start : read_slices[2].stop + 1,
     ]
 
 
-def get_seg(output, vol, bbox, chunk_size, num_workers):
+def get_seg(output, vol, bbox, chunk_size, filter_id, num_workers):
     # NOTE: need to reimplement this for func parallelism
     # extra +1 due to bbox format
     # shape = (1 + bbox[2 * i + 1 + 1] - bbox[2 * i + 1] for i in range(3))
@@ -612,6 +584,7 @@ def get_seg(output, vol, bbox, chunk_size, num_workers):
         output=output,
         bbox=bbox,
         bbox_in=bbox,
+        filter_id=filter_id,
     )
     return output
 
