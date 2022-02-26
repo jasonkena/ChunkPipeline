@@ -7,6 +7,19 @@ import sys
 from settings import *
 
 
+def extend_bbox(bbox, max_shape):
+    bbox = bbox.copy()
+    bbox[1] = max(0, bbox[1] - 1)
+    bbox[3] = max(0, bbox[3] - 1)
+    bbox[5] = max(0, bbox[5] - 1)
+    # -1 because of inclusive indexing
+    bbox[2] = min(max_shape[0] - 1, bbox[2] + 1)
+    bbox[4] = min(max_shape[1] - 1, bbox[4] + 1)
+    bbox[6] = min(max_shape[2] - 1, bbox[6] + 1)
+
+    return bbox
+
+
 def chunk_func_spine(params, all, spine):
     shrink_slices = params["shrink_slices"]
     assert shrink_slices is not None
@@ -21,7 +34,7 @@ def main(input_path, id):
     cache = h5py.File(os.path.join(input_path, "cache.h5"), "w")
 
     bboxes = np.loadtxt(os.path.join(input_path, "den_6nm_bb.txt"), dtype=int)
-    row = bboxes[id]
+    row = extend_bbox(bboxes[id], all.get("main").shape)
 
     output_file = os.path.join("results", f"{row[0]}.npy")
     if os.path.exists(output_file):
