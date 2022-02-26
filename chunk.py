@@ -86,7 +86,7 @@ class ChunkDataset(Dataset):
 
 
 def simple_chunk(
-    dataset_output,
+    dataset_outputs,
     dataset_inputs,
     chunk_size,
     func,
@@ -100,27 +100,27 @@ def simple_chunk(
 ):
 
     # chunks operations (func) on input
-    # dataset_output: output dataset to write to; if None, will write to nested array
+    # dataset_outputs: output datasets to write to; if None, will write to nested array
     # dataset_inputs: list of h5 datasets; if non-list, will be treated as size of input for zyx
     # chunk_size: [size_z, size_y, size_x]
     # pad: "zero", "extend", "half_extend" or False value, output will be trimmed
     # zero will always pad each dimension by 2, extend will do the same if not on boundary, half_extend right_extends
     # func, *args, **kwargs: self-explanatory
     # bbox: inclusive ranges to perform the computation on, of the form [id, z1, z2, y1, y2, x1, x2]
-    # TODO: take into account extend for bbox
 
     # NOTE: assumes input sizes are all equal and that output size = input size
     # NOTE: func should not overwrite input; just pass same dataset as output
 
     assert pad in ["zero", "extend", "half_extend", False]
     if isinstance(dataset_inputs, list):
+        # TODO: verify all inputs
         shape = dataset_inputs[0].shape
     else:
         shape = dataset_inputs
-    if dataset_output == None:
-        dataset_output = []
-    else:
-        assert dataset_output.shape[:len(shape)] == shape
+    dataset_outputs = [i if i is not None else [] for i in dataset_outputs]
+    for dataset_output in dataset_outputs:
+        if not isinstance(dataset_output, list):
+            assert dataset_output.shape[: len(shape)] == shape
 
     if bbox is not False:
         bbox = bbox[1:]
@@ -164,25 +164,33 @@ def simple_chunk(
         else:
             output = func(*inputs["inputs"], *args, **kwargs)
 
-        if not isinstance(dataset_output, list):
-            if pad == "zero":
-                output = output[
-                    pad_width[0] : -pad_width[0],
-                    pad_width[1] : -pad_width[1],
-                    pad_width[2] : -pad_width[2],
-                ]
-            elif pad == "extend" or pad == "half_extend":
-                output = output[inputs["shrink_slices"]]
+        if len(dataset_outputs):
+            assert len(output) == len(dataset_outputs)
 
-        if isinstance(dataset_output, list):
-            dataset_output.append(output)
-        else:
-            dataset_output[inputs["original_slices"]] = output
+        for i in range(len(dataset_outputs)):
+            if not isinstance(dataset_outputs[i], list):
+                if pad == "zero":
+                    output[i] = output[i][
+                        pad_width[0] : -pad_width[0],
+                        pad_width[1] : -pad_width[1],
+                        pad_width[2] : -pad_width[2],
+                    ]
+                elif pad == "extend" or pad == "half_extend":
+                    output[i] = output[i][inputs["shrink_slices"]]
+                dataset_outputs[i][inputs["original_slices"]] = output[i]
+            else:
+                dataset_outputs[i].append(output[i])
 
-    if isinstance(dataset_output, list):
-        dataset_output = np.array(dataset_output, dtype=object)
-        return dataset_output.reshape(*[len(i) for i in ranges])
-    return dataset_output
+    for i in range(len(dataset_outputs)):
+        if isinstance(dataset_outputs[i], list):
+            dataset_output = np.array(dataset_outputs[i], dtype=object)
+            shape = [len(i) for i in ranges]
+            if dataset_output.ndim > 1:
+                shape.append(-1)
+            dataset_outputs[i] = dataset_output.reshape(shape)
+    if len(dataset_outputs) == 1:
+        return dataset_outputs[0]
+    return dataset_outputs
 
 
 def get_is_first_unique(array):
@@ -199,7 +207,7 @@ def _chunk_bbox(params, vol):
     bboxes[:, 3:5] += chunk_size[1] * y
     bboxes[:, 5:7] += chunk_size[2] * x
 
-    return bboxes
+    return [bboxes]
 
 
 def chunk_bbox(vol, chunk_size, num_workers):
@@ -211,7 +219,7 @@ def chunk_bbox(vol, chunk_size, num_workers):
     # restore original coordinates
     # [z,y,x], then [seg id, zmin, zmax, etc]
     bboxes = simple_chunk(
-        None, [vol], chunk_size, _chunk_bbox, num_workers, pass_params=True
+        [None], [vol], chunk_size, _chunk_bbox, num_workers, pass_params=True
     )
     bboxes = np.concatenate(bboxes.reshape(-1).tolist(), axis=0)
     bboxes = bboxes[np.argsort(bboxes[:, 0])]
@@ -239,6 +247,7 @@ def _chunk_cc3d_neighbors(
     group_cache,
     mask,
 ):
+    # NOTE: will need to rewrite for parallelism, remove side effects
     z, y, x = [params[i] for i in ["z", "y", "x"]]
     # performs unions on connected components based on neighbors
     mask = mask[
@@ -281,7 +290,7 @@ def _chunk_cc3d_neighbors(
 
 def _chunk_remap_cc3d(params, partial_cc3d, remapping):
     z, y, x = [params[i] for i in ["z", "y", "x"]]
-    return remapping[(z, y, x)][partial_cc3d]
+    return [remapping[(z, y, x)][partial_cc3d]]
 
 
 def _chunk_half_extend_cc3d(params, vol, zyx_idx, mask, group_cache, connectivity):
@@ -304,15 +313,18 @@ def _chunk_half_extend_cc3d(params, vol, zyx_idx, mask, group_cache, connectivit
     dataset_neighbors[:] = neighbors
 
     # will be trimmed automatically
-    return connected_components
+    return [connected_components]
 
 
-def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_workers):
+def chunk_cc3d(
+    dataset_output, vol, group_cache, chunk_size, connectivity, num_workers, k
+):
     # perform chunked cc3d calculations
     # dataset_output: output dataset to write to; if None, will write to nested array
     # vol: h5 dataset used as input
     # chunk_size: [size_z, size_y, size_x]
     # dataset_cache: vol, 3
+    # k: either int or False
     # NOTE: if IndexError is emitted, result is invalid
 
     # cc3d only handles inputs > 1
@@ -321,12 +333,12 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         "cache", (*vol.shape, 3), dtype=vol.dtype
     )
     zyx_idx = simple_chunk(
-        dataset_cache,
+        [dataset_cache],
         vol.shape,
         chunk_size,
-        lambda params: np.array([params["z"], params["y"], params["x"]]).reshape(
-            1, 1, -1
-        ),
+        lambda params: [
+            np.array([params["z"], params["y"], params["x"]]).reshape(1, 1, -1)
+        ],
         num_workers,
         pass_params=True,
     )
@@ -338,7 +350,7 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
 
     # perform cc3d on individual chunks
     partial_cc3d = simple_chunk(
-        dataset_output,
+        [dataset_output],
         [vol, zyx_idx],
         chunk_size,
         _chunk_half_extend_cc3d,
@@ -353,10 +365,10 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
     # TODO: don't hardcode dtype
     # get voxel_counts for each chunk
     partial_statistics = simple_chunk(
-        None,
+        [None],
         [partial_cc3d],
         chunk_size,
-        lambda vol: cc3d.statistics(vol.astype(np.uint64)),
+        lambda vol: [cc3d.statistics(vol.astype(np.uint64))],
         num_workers,
     )
 
@@ -364,7 +376,7 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
     uf = UnionFind()
     remapping = {}
     simple_chunk(
-        None,
+        [],
         [partial_cc3d],
         chunk_size,
         _chunk_cc3d_neighbors,
@@ -407,11 +419,14 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
     # NOTE: can vectorize remapping assignment
     for i, key in enumerate(range(mapping.shape[0]), 1):
         for val in mapping[key]:
-            remapping[(val[0], val[1], val[2])][val[3]] = i
+            if k:
+                remapping[(val[0], val[1], val[2])][val[3]] = i * (i <= k)
+            else:
+                remapping[(val[0], val[1], val[2])][val[3]] = i
 
     # remap dataset_output
     simple_chunk(
-        partial_cc3d,
+        [partial_cc3d],
         [partial_cc3d],
         chunk_size,
         _chunk_remap_cc3d,
@@ -419,7 +434,142 @@ def chunk_cc3d(dataset_output, vol, group_cache, chunk_size, connectivity, num_w
         pass_params=True,
         remapping=remapping,
     )
+
+    if k:
+        voxel_counts[0] += np.sum(voxel_counts[k + 1 :])
+        voxel_counts = voxel_counts[: k + 1]
     return partial_cc3d, voxel_counts
+
+
+def _chunk_argwhere(params, *args, **kwargs):
+    z, y, x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
+    # kwargs must contain func, and it must return 2 things: binary mask and another (array or None)
+    # returns indices where vol is true
+    new_kwargs = kwargs.copy()
+    func = new_kwargs.pop("chunk_func")
+    mask, extra = func(params, *args, **new_kwargs)
+
+    idx = np.argwhere(mask)
+    if extra is not None:
+        extra_dim = 1 if mask.ndim < 4 else mask.shape[3]
+        idx = np.concatenate((idx, extra[mask].reshape(-1, extra_dim)), axis=1)
+    idx[:, 0] += chunk_size[0] * z
+    idx[:, 1] += chunk_size[1] * y
+    idx[:, 2] += chunk_size[2] * x
+
+    return [idx]
+
+
+def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, bbox, pad, num_workers):
+    # TODO: implement chunked saving instead of aggregating all indices
+    return np.concatenate(
+        simple_chunk(
+            [None],
+            dataset_inputs,
+            chunk_size,
+            _chunk_argwhere,
+            num_workers,
+            pad=pad,
+            pass_params=True,
+            bbox=bbox,
+            chunk_func=chunk_func,
+        ).reshape(-1)
+    )
+
+
+def get_bbox_read_slice(idx, chunk_size, bbox_in):
+    # idx: [z,y,x]
+    return [
+        slice(
+            max(0, bbox_in[2 * i + 1] - idx[i] * chunk_size[i]),
+            # NOTE: intentionally doesn't do +1 to end, need to do manually with output of function
+            min(chunk_size[i] - 1, bbox_in[2 * i + 1 + 1] - idx[i] * chunk_size[i]),
+        )
+        for i in range(3)
+    ]
+
+
+def _chunk_unique(params, vol, return_inverse, bbox_in):
+    # NOTE: must take into account shrink_slices which may be null
+    # shrink_slices might be null
+    z, y, x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
+    # NOTE: will need to rewrite this to implement parallelism
+    idx = [z, y, x]
+
+    original_shape = vol.shape
+    # shrink if bbox
+    bbox_slices = get_bbox_read_slice(idx, chunk_size, bbox_in)
+    bbox_slices = np.s_[
+        bbox_slices[0].start : bbox_slices[0].stop + 1,
+        bbox_slices[1].start : bbox_slices[1].stop + 1,
+        bbox_slices[2].start : bbox_slices[2].stop + 1,
+    ]
+
+    vol = vol[bbox_slices]
+    shape = vol.shape
+
+    output = np.unique(vol, return_inverse=return_inverse)
+
+    if not return_inverse:
+        return [output]
+
+    # TODO: do not hardcode dtype
+    new_indices = np.zeros(original_shape, dtype=np.uint64)
+    # NOTE: shrink_slices might not do what you think it does
+    new_indices[bbox_slices] = output[1].reshape(shape)
+
+    return [
+        [z, y, x, output[0]],
+        new_indices,
+    ]
+
+
+def chunk_unique(dataset_input, chunk_size, bbox, return_inverse, num_workers):
+    # return_inverse: either None or equal
+    # NOTE: will need to rewrite if number of unique values exceed memory
+    # simple_chunk(dataset_input, )
+    output = simple_chunk(
+        [None] if return_inverse is None else [None, return_inverse],
+        [dataset_input],
+        chunk_size,
+        _chunk_unique,
+        num_workers,
+        pass_params=True,
+        bbox=bbox,
+        return_inverse=(return_inverse is not None),
+        bbox_in=bbox,
+    )
+    if return_inverse is None:
+        unique = output
+    else:
+        unique, idx = output
+
+    # TODO: remove explicit dimension usage
+    if return_inverse is None:
+        # output unique might be (z,y,x, -1) or just (z,y,x, dtype=object)
+        if unique.ndim > 3:
+            final_unique = np.unique(unique.reshape(-1))
+        else:
+            final_unique = np.unique(np.concatenate(unique.reshape(-1)))
+        return final_unique
+
+    flattened = unique.reshape(-1, 4)
+    final_unique = np.unique(np.concatenate(flattened[:, 3]))
+    remapping = {}
+    for row in flattened:
+        # NOTE: might be more efficient to implement own searchsorted using np.unique, since all inputs are sorted
+        remapping[tuple(row[:3].tolist())] = np.searchsorted(final_unique, row[3])
+    __import__('pdb').set_trace()
+
+    #for i in range()
+
+    # NOTE: need to remap input idx, cann't remap remappiung
+    
+
+    # TODO: don't hardcode dtype
+    max_unique = final_unique.max()
+    remapping = np.zeros(max_unique+1, dtype=np.uint64)
+    remapping[final_unique] = np.arange(max_unique)
 
 
 def _chunk_write_seg(params, vol, output, bbox_in):
@@ -427,13 +577,7 @@ def _chunk_write_seg(params, vol, output, bbox_in):
     # NOTE: will need to rewrite this to implement parallelism
     idx = [z, y, x]
     # extra +1 due to bbox format
-    read_slices = [
-        slice(
-            max(0, bbox_in[2 * i + 1] - idx[i] * chunk_size[i]),
-            min(chunk_size[i] - 1, bbox_in[2 * i + 1 + 1] - idx[i] * chunk_size[i]),
-        )
-        for i in range(3)
-    ]
+    read_slices = get_bbox_read_slice(idx, chunk_size, bbox_in)
     distances = [i.stop - i.start for i in read_slices]
     write_slices = [
         slice(
@@ -459,7 +603,7 @@ def get_seg(output, vol, bbox, chunk_size, num_workers):
     # shape = (1 + bbox[2 * i + 1 + 1] - bbox[2 * i + 1] for i in range(3))
 
     simple_chunk(
-        None,
+        [],
         [vol],
         chunk_size,
         _chunk_write_seg,

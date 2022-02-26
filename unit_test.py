@@ -12,7 +12,7 @@ from imu.io import get_bb_all3d
 import opensimplex
 import edt
 from chunk_sphere import get_dt, get_boundary, _chunk_get_boundary, _get_dt
-from point import chunk_argwhere, chunk_func_spine
+from point import chunk_func_spine
 
 
 def generate_simplex_noise(shape, feature_scale):
@@ -51,10 +51,10 @@ class ChunkTest(unittest.TestCase):
 
         for pad in ["zero", "extend", "half_extend", False]:
             output = chunk.simple_chunk(
-                f.get("output"),
+                [f.get("output")],
                 [f.get("input1"), f.get("input2")],
                 chunk_size,
-                lambda x, y: x > y,
+                lambda x, y: [x > y],
                 num_workers,
                 pad=pad,
                 pad_width=pad_width,
@@ -81,6 +81,7 @@ class ChunkTest(unittest.TestCase):
         chunk_size = (9, 8, 7)
         connectivity = 26
         num_workers = 2
+        k = 13
 
         input = np.random.rand(*shape) > 0.8
 
@@ -97,18 +98,22 @@ class ChunkTest(unittest.TestCase):
             chunk_size,
             connectivity,
             num_workers,
+            k,
         )
-        N = output[1].shape[0] - 1
 
         # largest_k instead of connected_components, because of ordering by voxel_count
-        gt, gt_N = cc3d.largest_k(input, k=N, return_N=True, connectivity=connectivity)
+        gt = cc3d.largest_k(input, k=k, connectivity=connectivity)
         statistics = cc3d.statistics(gt)["voxel_counts"]
         statistics = np.concatenate([[statistics[0]], np.sort(statistics[1:])[::-1]])
-        print(f"N: {N}, gt_N: {gt_N}")
 
-        self.assertTrue(N == gt_N)
         # cannot evaluate whether cc3d is equal because ordering cannot be guaranteed
         self.assertTrue(np.array_equal(output[1], statistics))
+        # check whether k filtering causes incorrect results
+        self.assertTrue(
+            np.array_equal(
+                output[1], cc3d.statistics(output[0][:].astype(np.uint))["voxel_counts"]
+            )
+        )
 
     def test_dt_sanity(self):
         anisotropy = (1, 2, 3)
@@ -116,7 +121,7 @@ class ChunkTest(unittest.TestCase):
         input = np.ones((pad * 2 + 1, pad * 2 + 1, pad * 2 + 1))
         input[pad, pad, pad] = 0
 
-        output = _get_dt(input, anisotropy, False)
+        output = _get_dt(input, anisotropy, False)[0]
 
         assert output[0, pad, pad] == anisotropy[0] * pad
         assert output[pad, 0, pad] == anisotropy[1] * pad
@@ -143,11 +148,12 @@ class ChunkTest(unittest.TestCase):
             anisotropy,
             False,
             threshold,
+            False, # bbox
             num_workers,
         )
         output_idx = output[:] <= threshold
 
-        gt = _get_dt(f.get("input")[:], anisotropy, False)
+        gt = _get_dt(f.get("input")[:], anisotropy, False)[0]
         gt_idx = gt <= threshold
 
         num_errors = np.logical_xor(output_idx, gt_idx)
@@ -199,7 +205,7 @@ class ChunkTest(unittest.TestCase):
         bbox = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)[0]
         assert bbox[0] == 1
 
-        output = chunk_argwhere(
+        output = chunk.chunk_argwhere(
             [f.get("input")],
             chunk_size,
             lambda params, vol: [vol == bbox[0], None],
@@ -232,7 +238,7 @@ class ChunkTest(unittest.TestCase):
         bbox = chunk.chunk_bbox(f.get("all"), chunk_size, num_workers)[0]
         assert bbox[0] == 1
 
-        output = chunk_argwhere(
+        output = chunk.chunk_argwhere(
             [f.get("all"), f.get("spine")],
             chunk_size,
             lambda params, all, spine: chunk_func_spine(params, all, spine, bbox[0]),
@@ -243,7 +249,7 @@ class ChunkTest(unittest.TestCase):
 
         output = output[np.lexsort(output.T)]
 
-        gt = _chunk_get_boundary(all == bbox[0])
+        gt = _chunk_get_boundary(all == bbox[0])[0]
         gt = np.concatenate(
             [np.argwhere(gt), (spine == bbox[0])[gt].reshape(-1, 1)], axis=1
         )
@@ -251,6 +257,31 @@ class ChunkTest(unittest.TestCase):
         idx = gt[np.lexsort(gt.T)]
 
         self.assertTrue(np.array_equal(output, idx))
+
+    def test_chunk_unique(self):
+        # test both argwhere_seg and simple_chunk's bbox
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+        num_workers = 2
+
+        input = np.zeros(shape, dtype=int)
+        input[40:60, 40:60, 40:60] = np.random.randint(0, 100, (20, 20, 20))
+
+        f = h5py.File("test.hdf5", "w")
+        f.create_dataset("input", data=input)
+        f.create_dataset("inverse", shape, dtype="uint16")
+
+        # get first row
+        bbox = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)[0]
+        assert bbox[0] == 1
+
+        output = chunk.chunk_unique(
+            f.get("input"),
+            chunk_size,
+            bbox,
+            f.get("inverse"),
+            num_workers,
+        )
 
     def test_get_seg(self):
         # test both argwhere_seg and simple_chunk's bbox

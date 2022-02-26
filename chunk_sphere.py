@@ -13,6 +13,7 @@ import numpy as np
 import chunk
 from utils import pad_vol
 from settings import *
+import point
 
 # NOTE: here naive separation between segments is used: each segment id is processed separately
 # can potentially come up with a way to do it in a chunk-based manner instead of by segments
@@ -26,7 +27,7 @@ def _chunk_get_boundary(vol):
     boundary = torch.logical_and(
         F.max_pool3d((~padded_vol).float().unsqueeze(0), kernel_size=3, stride=1), vol
     ).squeeze(0)
-    return boundary.numpy()
+    return [boundary.numpy()]
 
 
 def get_boundary(boundary_dataset, vol, chunk_size, num_workers):
@@ -36,7 +37,7 @@ def get_boundary(boundary_dataset, vol, chunk_size, num_workers):
     # TODO: can prevent double input chunks to full chunk_size; no way to elegantly implement it
 
     return chunk.simple_chunk(
-        boundary_dataset,
+        [boundary_dataset],
         [vol],
         chunk_size,
         _chunk_get_boundary,
@@ -58,11 +59,18 @@ def _get_dt(vol, anisotropy, black_border):
     )
     assert not np.isnan(dt).any()
 
-    return dt
+    return [dt]
 
 
 def get_dt(
-    dataset_output, vol, chunk_size, anisotropy, black_border, threshold, num_workers
+    dataset_output,
+    vol,
+    chunk_size,
+    anisotropy,
+    black_border,
+    threshold,
+    bbox,
+    num_workers,
 ):
     # computes euclidean distance transform (voxel-wise distance to nearest background)
     # vol: 3d volume (with 0 indicating back)
@@ -72,7 +80,7 @@ def get_dt(
     pad_width = [math.ceil(threshold / i) for i in anisotropy]
 
     return chunk.simple_chunk(
-        dataset_output,
+        [dataset_output],
         [vol],
         chunk_size,
         _get_dt,
@@ -80,6 +88,7 @@ def get_dt(
         pad="extend",
         pass_params=False,
         pad_width=pad_width,
+        bbox=bbox,
         anisotropy=anisotropy,
         black_border=black_border,
     )
@@ -138,7 +147,17 @@ def sphere_expansion(vals, dt_boundary, sphere_bounds, erode_delta, anisotropy):
     return result
 
 
-def sphere_iteration(expanded, dt, vol, erode_delta, anisotropy):
+def sphere_iteration(
+    group_cache,
+    expanded,
+    dt,
+    vol,
+    erode_delta,
+    anisotropy,
+    chunk_size,
+    bbox,
+    num_workers,
+):
     # performs sphere_iteration on volumes that may already be dilated
     # dt: edt from background in original volume
     # vol: original volume
@@ -146,9 +165,21 @@ def sphere_iteration(expanded, dt, vol, erode_delta, anisotropy):
     # anisotropy: [z-size, y-size, x-size]
     # returns newly dilated volume
 
-    boundary = get_boundary(expanded)
-    __import__("pdb").set_trace()
-    boundary_idx = np.nonzero(boundary)
+    boundary = get_boundary(
+        group_cache.create_dataset("boundary", expanded.shape, dtype=bool),
+        expanded,
+        chunk_size,
+        num_workers,
+    )
+    boundary_idx = chunk.chunk_argwhere(
+        [boundary],
+        chunk_size,
+        lambda params, vol: [vol, None],
+        bbox,
+        False,
+        num_workers,
+    )
+
     vals, boundary_inverse = np.unique(dt[boundary], return_inverse=True)
 
     sphere_bounds = get_sphere_bounds(
@@ -164,7 +195,16 @@ def sphere_iteration(expanded, dt, vol, erode_delta, anisotropy):
 
 
 def extract(
-    vol, num_iter, max_erode, erode_delta, anisotropy=(30, 6, 6), connectivity=26
+    group_cache,
+    vol,
+    chunk_size,
+    anisotropy,
+    connectivity,
+    max_erode,
+    erode_delta,
+    num_iter,
+    bbox,
+    num_workers,
 ):
     # gets volume segmentation
     # vol: binary 3d volume
@@ -173,28 +213,39 @@ def extract(
     # anisotropy: [z-size, y-size, x-size]
     # connectivity: read cc3d docs
 
-    # assert that volume is connected
-    assert (
-        cc3d.largest_k(
-            vol,
-            k=1,
-            connectivity=connectivity,
-            return_N=True,
-        )[1]
-        == 1
+    # NOTE: assumes volume is connected
+
+    dt = get_dt(
+        group_cache.create_dataset("dt", vol.shape, dtype="f"),
+        vol,
+        chunk_size,
+        anisotropy,
+        black_border=False,
+        threshold=max_erode + erode_delta,
+        bbox=bbox,
+        num_workers=num_workers,
     )
-    dt = get_dt(vol, anisotropy, black_border=False)
-    remaining = dt >= max_erode
-    largest, N_remaining = cc3d.largest_k(
+    remaining = chunk.simple_chunk(
+        [group_cache.create_dataset("remaining", dt.shape, dtype=bool)],
+        [dt],
+        chunk_size,
+        lambda dt: [dt >= max_erode],
+        num_workers,
+    )
+    # TODO: do not hardcode dtype
+    largest, _ = chunk.chunk_cc3d(
+        group_cache.create_dataset("largest", remaining.shape, dtype="uint16"),
         remaining,
+        group_cache,
+        chunk_size,
+        connectivity,
+        num_workers,
         k=1,
-        connectivity=connectivity,
-        return_N=True,
     )
     # TODO: assert that final segmentation is only composed of single CC
     expanded = largest
-    for _ in tqdm(range(num_iter)):
-        expanded = sphere_iteration(expanded, dt, vol, erode_delta, anisotropy)
+    for _ in range(num_iter):
+        expanded = sphere_iteration(None, expanded, dt, vol, erode_delta, anisotropy)
 
     others = np.logical_xor(vol, expanded)
     # segment the non trunks
