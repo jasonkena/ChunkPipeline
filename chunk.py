@@ -288,9 +288,22 @@ def _chunk_cc3d_neighbors(
         uf.union(tuple(result[i]), tuple(result[i - 1]))
 
 
-def _chunk_remap_cc3d(params, partial_cc3d, remapping):
+def _chunk_remap(params, vol, remapping):
     z, y, x = [params[i] for i in ["z", "y", "x"]]
-    return [remapping[(z, y, x)][partial_cc3d]]
+    return [remapping[(z, y, x)][vol]]
+
+
+def chunk_remap(vol, remapping, chunk_size, num_workers):
+    # in place remapping
+    return simple_chunk(
+        [vol],
+        [vol],
+        chunk_size,
+        _chunk_remap,
+        num_workers,
+        pass_params=True,
+        remapping=remapping,
+    )
 
 
 def _chunk_half_extend_cc3d(params, vol, zyx_idx, mask, group_cache, connectivity):
@@ -425,15 +438,7 @@ def chunk_cc3d(
                 remapping[(val[0], val[1], val[2])][val[3]] = i
 
     # remap dataset_output
-    simple_chunk(
-        [partial_cc3d],
-        [partial_cc3d],
-        chunk_size,
-        _chunk_remap_cc3d,
-        num_workers,
-        pass_params=True,
-        remapping=remapping,
-    )
+    chunk_remap(partial_cc3d, remapping, chunk_size, num_workers)
 
     if k:
         voxel_counts[0] += np.sum(voxel_counts[k + 1 :])
@@ -524,16 +529,9 @@ def chunk_unique(dataset_input, chunk_size, return_inverse, num_workers):
     for row in flattened:
         # NOTE: might be more efficient to implement own searchsorted using np.unique, since all inputs are sorted
         remapping[tuple(row[:3].tolist())] = np.searchsorted(final_unique, row[3])
-    __import__("pdb").set_trace()
 
-    # for i in range()
-
-    # NOTE: need to remap input idx, cann't remap remappiung
-
-    # TODO: don't hardcode dtype
-    max_unique = final_unique.max()
-    remapping = np.zeros(max_unique + 1, dtype=np.uint64)
-    remapping[final_unique] = np.arange(max_unique)
+    chunk_remap(idx, remapping, chunk_size, num_workers)
+    return final_unique, idx
 
 
 def _chunk_write_seg(params, vol, output, bbox_in, filter_id):

@@ -35,7 +35,7 @@ def main(input_path, id):
     new_spine = cache.create_dataset(
         "new_spine",
         shape=(row[2] - row[1] + 1, row[4] - row[3] + 1, row[6] - row[5] + 1),
-        dtype="int",
+        dtype="uint16",
     )
 
     new_all = chunk.get_seg(

@@ -295,17 +295,23 @@ class ChunkTest(unittest.TestCase):
         f.create_dataset("input", data=input)
         f.create_dataset("inverse", shape, dtype="uint16")
 
-        # get first row
-        bbox = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)[0]
-        assert bbox[0] == 1
-
-        output = chunk.chunk_unique(
+        gt_unique, gt_inverse = np.unique(input, return_inverse=True)
+        unique, inverse = chunk.chunk_unique(
             f.get("input"),
             chunk_size,
-            bbox,
             f.get("inverse"),
             num_workers,
         )
+        self.assertTrue(np.array_equal(gt_unique, unique))
+        self.assertTrue(np.array_equal(gt_inverse.reshape(shape), inverse[:]))
+
+        unique = chunk.chunk_unique(
+            f.get("input"),
+            chunk_size,
+            None,
+            num_workers,
+        )
+        self.assertTrue(np.array_equal(gt_unique, unique))
 
     def test_get_seg(self):
         # test both argwhere_seg and simple_chunk's bbox
