@@ -1,0 +1,6 @@
+*.h5
+old/
+*.hdf5
+*.npy
+*.txt
+*.out

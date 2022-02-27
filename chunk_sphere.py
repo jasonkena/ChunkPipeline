@@ -211,6 +211,8 @@ def extract(
     # anisotropy: [z-size, y-size, x-size]
     # connectivity: read cc3d docs
 
+    print("Do get_seg")
+    # raise ValueError
     # NOTE: assumes volume is connected
 
     dt = get_dt(
@@ -220,7 +222,6 @@ def extract(
         anisotropy,
         black_border=False,
         threshold=max_erode + erode_delta,
-        bbox=bbox,
         num_workers=num_workers,
     )
     remaining = chunk.simple_chunk(

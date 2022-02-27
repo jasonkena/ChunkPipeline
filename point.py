@@ -5,19 +5,7 @@ import h5py
 import os
 import sys
 from settings import *
-
-
-def extend_bbox(bbox, max_shape):
-    bbox = bbox.copy()
-    bbox[1] = max(0, bbox[1] - 1)
-    bbox[3] = max(0, bbox[3] - 1)
-    bbox[5] = max(0, bbox[5] - 1)
-    # -1 because of inclusive indexing
-    bbox[2] = min(max_shape[0] - 1, bbox[2] + 1)
-    bbox[4] = min(max_shape[1] - 1, bbox[4] + 1)
-    bbox[6] = min(max_shape[2] - 1, bbox[6] + 1)
-
-    return bbox
+from utils import extend_bbox
 
 
 def chunk_func_spine(params, all, spine):
@@ -28,6 +16,7 @@ def chunk_func_spine(params, all, spine):
 
 
 def main(input_path, id):
+    # NOTE: might need to rewrite this to use extracted/id.h5
     # id is in range(50)
     all = h5py.File(os.path.join(input_path, "seg_den_6nm.h5"))
     spine = h5py.File(os.path.join(input_path, "seg_den_spine_6nm.h5"))
