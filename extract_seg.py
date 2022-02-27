@@ -22,7 +22,7 @@ def main(input_path, id):
     main = extracted.create_dataset(
         "main",
         shape=(row[2] - row[1] + 1, row[4] - row[3] + 1, row[6] - row[5] + 1),
-        dtype="u1",
+        dtype=bool,
     )
     extracted.create_dataset("row", data=row)
 
