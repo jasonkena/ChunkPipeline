@@ -33,7 +33,7 @@ def main(input_path, id):
     spine = h5py.File(os.path.join(input_path, "seg_den_spine_6nm.h5"))
     cache = h5py.File(os.path.join(input_path, "cache.h5"), "w")
 
-    bboxes = np.loadtxt(os.path.join(input_path, "den_6nm_bb.txt"), dtype=int)
+    bboxes = np.load(os.path.join(input_path, "den_6nm_bb.npy")).astype(int)
     row = extend_bbox(bboxes[id], all.get("main").shape)
 
     output_file = os.path.join("results", f"{row[0]}.npy")
