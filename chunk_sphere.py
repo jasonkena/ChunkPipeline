@@ -178,7 +178,6 @@ def extract(
         threshold=max_erode + erode_delta,
         num_workers=num_workers,
     )
-    print("welp")
     remaining = chunk.simple_chunk(
         [group_cache.create_dataset("remaining", dt.shape, dtype=bool)],
         [dt],
@@ -186,9 +185,8 @@ def extract(
         lambda dt: [dt >= max_erode],
         num_workers,
     )
-    print("remaining")
     # TODO: do not hardcode dtype
-    expanded, _ = chunk.chunk_cc3d(
+    expanded, largest_voxel_counts = chunk.chunk_cc3d(
         group_cache.create_dataset("expanded", remaining.shape, dtype="uint16"),
         remaining,
         group_cache,
@@ -197,7 +195,6 @@ def extract(
         num_workers,
         k=1,
     )
-    print("expanded")
 
     # TODO: assert that final segmentation is only composed of single CC
     for _ in range(num_iter):
@@ -229,6 +226,8 @@ def extract(
         num_workers,
         k=False,
     )
+    voxel_counts = np.concatenate([largest_voxel_counts[1:], voxel_counts[1:]])
+    voxel_counts = np.concatenate([[vol.shape[0]*vol.shape[1]*vol.shape[2]-np.sum(voxel_counts)], voxel_counts])
 
     print(f"voxel_counts: {voxel_counts}")
 
