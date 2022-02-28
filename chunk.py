@@ -342,6 +342,9 @@ def chunk_cc3d(
 
     # cc3d only handles inputs > 1
     assert all([i > 1 for i in chunk_size])
+
+    if "cache" in group_cache:
+        del group_cache["cache"]
     dataset_cache = group_cache.create_dataset(
         "cache", (*vol.shape, 3), dtype=vol.dtype
     )
