@@ -16,4 +16,4 @@ conda activate dendrite
 
 cd /mmfs1/data/adhinart/dendrite
 
-python3 point.py ./extracted $SLURM_ARRAY_TASK_ID
+python3 chunk_sphere.py ./extracted $SLURM_ARRAY_TASK_ID

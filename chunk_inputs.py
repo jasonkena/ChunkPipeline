@@ -18,7 +18,7 @@ def extract_pc(sid, root_dir):
     return points, colors
 
 
-def crop_point_cloud(sid, root_dir, result_dir, voxel_size=200, point_threshold=30000):
+def crop_point_cloud(sid, root_dir, result_dir, voxel_size=300, point_threshold=30000):
 
     print("PROCESSING POINT CLOUD ", sid)
     print()
@@ -99,5 +99,5 @@ def crop_point_cloud(sid, root_dir, result_dir, voxel_size=200, point_threshold=
 
 if __name__ == "__main__":
     root_dir = "results"
-    result_dir = "cropped_res200_th30000"
+    result_dir = "cropped_res300_th30000"
     crop_point_cloud(int(sys.argv[1]) + 1, root_dir, result_dir)

@@ -177,7 +177,10 @@ def simple_chunk(
                     ]
                 elif pad == "extend" or pad == "half_extend":
                     output[i] = output[i][inputs["shrink_slices"]]
-                dataset_outputs[i][inputs["original_slices"]] = output[i]
+                if len(output[i].shape) > 3:
+                    dataset_outputs[i][inputs["original_slices"]] = np.broadcast_to(output[i], dataset_outputs[i][inputs["original_slices"]].shape)
+                else:
+                    dataset_outputs[i][inputs["original_slices"]] = output[i]
             else:
                 dataset_outputs[i].append(output[i])
 
@@ -262,7 +265,7 @@ def _chunk_cc3d_neighbors(
     for i in range(1, partial_statistics[z, y, x]["voxel_counts"].shape[0]):
         uf.add((z, y, x, i))
 
-    neighbors = group_cache.get(f"{z},{y},{x}")[:]
+    neighbors = group_cache.get(f"-{z},{y},{x}")[:]
     zyx_idx = neighbors[:, :-1]
     new_cc_idx = partial_cc3d[mask]
     old_cc_idx = neighbors[:, -1]
@@ -321,7 +324,7 @@ def _chunk_half_extend_cc3d(params, vol, zyx_idx, mask, group_cache, connectivit
         axis=-1,
     ).reshape(-1, zyx_idx.shape[-1] + 1)
     dataset_neighbors = group_cache.create_dataset(
-        f"{z},{y},{x}", neighbors.shape, dtype=neighbors.dtype
+        f"-{z},{y},{x}", neighbors.shape, dtype=neighbors.dtype
     )
     dataset_neighbors[:] = neighbors
 
@@ -346,14 +349,14 @@ def chunk_cc3d(
     if "cache" in group_cache:
         del group_cache["cache"]
     dataset_cache = group_cache.create_dataset(
-        "cache", (*vol.shape, 3), dtype=vol.dtype
+        "cache", (*vol.shape, 3), dtype="uint16"
     )
     zyx_idx = simple_chunk(
         [dataset_cache],
         vol.shape,
         chunk_size,
         lambda params: [
-            np.array([params["z"], params["y"], params["x"]]).reshape(1, 1, -1)
+            np.array([params["z"], params["y"], params["x"]]).reshape(1, 1, 1, -1)
         ],
         num_workers,
         pass_params=True,
@@ -363,6 +366,10 @@ def chunk_cc3d(
     mask = np.ones([i + 1 for i in chunk_size], dtype=bool)
     # 2 instead of 1 because of [[0,1], [1,0]] edge case
     mask[:-2, :-2, :-2] = False
+
+    for key in group_cache.keys():
+        if key[0] == "-":
+            del group_cache[key]
 
     # perform cc3d on individual chunks
     partial_cc3d = simple_chunk(

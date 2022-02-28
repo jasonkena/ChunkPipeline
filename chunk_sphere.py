@@ -178,6 +178,7 @@ def extract(
         threshold=max_erode + erode_delta,
         num_workers=num_workers,
     )
+    print("welp")
     remaining = chunk.simple_chunk(
         [group_cache.create_dataset("remaining", dt.shape, dtype=bool)],
         [dt],
@@ -185,6 +186,7 @@ def extract(
         lambda dt: [dt >= max_erode],
         num_workers,
     )
+    print("remaining")
     # TODO: do not hardcode dtype
     expanded, _ = chunk.chunk_cc3d(
         group_cache.create_dataset("expanded", remaining.shape, dtype="uint16"),
@@ -195,6 +197,7 @@ def extract(
         num_workers,
         k=1,
     )
+    print("expanded")
 
     # TODO: assert that final segmentation is only composed of single CC
     for _ in range(num_iter):
@@ -241,12 +244,13 @@ def extract(
     return seg
 
 
-def main(id, input_path):
-    file = os.path.join("baseline", f"{id}.h5")
+def main(input_path, id):
+    #__import__("pdb").set_trace()
+    file = os.path.join("baseline", f"{str(id)}.h5")
     if os.path.exists(file):
         return
 
-    input = h5py.File(os.path.join(input_path, f"{id}.h5"))
+    input = h5py.File(os.path.join(input_path, f"{str(id)}.h5"))
     output = h5py.File(file, "w")
     # no need to create actual group
     group_cache = output
