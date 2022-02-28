@@ -244,13 +244,11 @@ def extract(
 
 
 def main(input_path, id):
-    #__import__("pdb").set_trace()
-    file = os.path.join("baseline", f"{str(id)}.h5")
-    if os.path.exists(file):
+    if os.path.exists(os.path.join("baseline", f"{str(id)}.h5")):
         return
 
     input = h5py.File(os.path.join(input_path, f"{str(id)}.h5"))
-    output = h5py.File(file, "w")
+    output = h5py.File(os.path.join(input_path, f"seg_{str(id)}.h5"), "w")
     # no need to create actual group
     group_cache = output
 
