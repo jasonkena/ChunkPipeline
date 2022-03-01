@@ -8,6 +8,7 @@ import cc3d
 from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset, DataLoader
+from settings import NUM_RETRY
 
 import math
 
@@ -70,7 +71,15 @@ class ChunkDataset(Dataset):
             shrink_slices = None
 
         if isinstance(self.dataset_inputs, list):
-            inputs = [i[slices] for i in self.dataset_inputs]
+            error_count = 0
+            while True:
+                try:
+                    inputs = [i[slices] for i in self.dataset_inputs]
+                    break
+                except Exception as e:
+                    error_count += 1
+                    if error_count > NUM_RETRY:
+                        raise e
         else:
             inputs = []
         if self.pad == "zero":
