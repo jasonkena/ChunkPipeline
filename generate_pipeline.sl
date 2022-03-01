@@ -30,7 +30,7 @@ cp *.txt $TMPDIR
 cp *.h5 $TMPDIR
 cp *.npy $TMPDIR
 
-if ( -f "$TMPDIR/$SLURM_ARRAY_TASK_ID.h5" ) then
+if ( -f "extracted/$SLURM_ARRAY_TASK_ID.h5" ) then
     cp extracted/$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
 else
     python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID
