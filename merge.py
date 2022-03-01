@@ -23,7 +23,7 @@ def main(output_path, inputs, idx):
         for i in range(len(inputs))
     ]
     final = final_output.create_dataset(
-        "main", shape=h5py.File("seg_den_6nm.h5").shape, dtype="uint16"
+        "main", shape=h5py.File("seg_den_6nm.h5").get("main").shape, dtype="uint16"
     )
 
     files = [h5py.File(i) for i in inputs]
@@ -33,7 +33,6 @@ def main(output_path, inputs, idx):
     num_spines = [i[2:].shape[0] for i in voxel_counts]
     # start indexing from
     cumsum_spines = np.cumsum([NUM_DENDRITES + 1] + num_spines)[:-1]
-
     remapping = {}
     for i in range(len(inputs)):
         remapping[idx[i]] = np.concatenate(
@@ -56,10 +55,10 @@ def main(output_path, inputs, idx):
 
 
 if __name__ == "__main__":
-    inputs = sorted(glob.glob("baseline/*"))
+    inputs = sorted(glob("baseline/*"))
     idx = [int(Path(i).stem.split("_")[1]) for i in inputs]
     # list of ids to select
-    filter = []
+    filter = [14]
     if len(filter):
         inputs = [inputs[i] for i in range(len(idx)) if idx[i] in filter]
         idx = [idx[i] for i in range(len(idx)) if idx[i] in filter]
