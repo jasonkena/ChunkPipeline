@@ -17,7 +17,7 @@ def chunk_func_spine(params, all, spine):
 
 def main(input_path, id):
     # id is in range(50)
-    all = h5py.File(os.path.join(input_path, f"{str(id-1)}.h5"))
+    all = h5py.File(os.path.join(input_path, f"{str(id)}.h5"))
     spine = h5py.File(os.path.join(input_path, "seg_den_spine_6nm.h5"))
     cache = h5py.File(os.path.join(input_path, "cache.h5"), "w")
 
