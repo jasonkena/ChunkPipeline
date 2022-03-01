@@ -11,7 +11,7 @@ from settings import *
 
 import numpy as np
 import chunk
-from utils import pad_vol
+from utils import pad_vol, create_compressed
 from settings import *
 
 # NOTE: here naive separation between segments is used: each segment id is processed separately
@@ -129,7 +129,7 @@ def sphere_iteration(
 
     pad_width = [math.ceil(threshold / i) for i in anisotropy]
     chunk.simple_chunk(
-        [group_cache.create_dataset("new_expanded", expanded.shape, dtype=bool)],
+        [create_compressed(group_cache, "new_expanded", expanded.shape, dtype=bool)],
         [expanded, dt, vol],
         chunk_size,
         lambda expanded, dt, vol: [
@@ -170,7 +170,7 @@ def extract(
     # NOTE: assumes volume is connected
 
     dt = get_dt(
-        group_cache.create_dataset("dt", vol.shape, dtype="f"),
+        create_compressed(group_cache, "dt", vol.shape, dtype="f"),
         vol,
         chunk_size,
         anisotropy,
@@ -179,7 +179,7 @@ def extract(
         num_workers=num_workers,
     )
     remaining = chunk.simple_chunk(
-        [group_cache.create_dataset("remaining", dt.shape, dtype=bool)],
+        [create_compressed(group_cache, "remaining", dt.shape, dtype=bool)],
         [dt],
         chunk_size,
         lambda dt: [dt >= max_erode],
@@ -187,7 +187,7 @@ def extract(
     )
     # TODO: do not hardcode dtype
     expanded, largest_voxel_counts = chunk.chunk_cc3d(
-        group_cache.create_dataset("expanded", remaining.shape, dtype="uint16"),
+        create_compressed(group_cache, "expanded", remaining.shape, dtype="uint16"),
         remaining,
         group_cache,
         chunk_size,
@@ -210,7 +210,7 @@ def extract(
         )
 
     others = chunk.simple_chunk(
-        [group_cache.create_dataset("others", shape=expanded.shape, dtype=bool)],
+        [create_compressed(group_cache, "others", shape=expanded.shape, dtype=bool)],
         [vol, expanded],
         chunk_size,
         lambda vol, expanded: [np.logical_xor(vol, expanded)],
@@ -218,7 +218,7 @@ def extract(
     )
     # segment the non trunks
     cc3d_others, voxel_counts = chunk.chunk_cc3d(
-        group_cache.create_dataset("cc3d_others", others.shape, dtype="uint16"),
+        create_compressed(group_cache, "cc3d_others", others.shape, dtype="uint16"),
         others,
         group_cache,
         chunk_size,
@@ -237,14 +237,14 @@ def extract(
     print(f"voxel_counts: {voxel_counts}")
 
     seg = chunk.simple_chunk(
-        [group_cache.create_dataset("seg", others.shape, dtype="uint16")],
+        [create_compressed(group_cache, "seg", others.shape, dtype="uint16")],
         [expanded, cc3d_others],
         chunk_size,
         # relabel so that trunk is idx 1
         lambda expanded, cc3d_others: [cc3d_others + (cc3d_others > 0) + expanded],
         num_workers,
     )
-    group_cache.create_dataset("voxel_counts", data=voxel_counts)
+    create_compressed(group_cache, "voxel_counts", data=voxel_counts)
 
     return seg
 

@@ -5,7 +5,7 @@ import h5py
 import os
 import sys
 from settings import *
-from utils import extend_bbox
+from utils import extend_bbox, create_compressed
 
 
 def chunk_func_spine(params, all, spine):
@@ -28,7 +28,8 @@ def main(input_path, id):
     if os.path.exists(output_file):
         return
 
-    new_spine = cache.create_dataset(
+    new_spine = create_compressed(
+        cache,
         "new_spine",
         shape=(row[2] - row[1] + 1, row[4] - row[3] + 1, row[6] - row[5] + 1),
         dtype="uint16",

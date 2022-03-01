@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from settings import *
 
 
 def pad_vol(vol, kernel_shape):
@@ -29,3 +30,9 @@ def extend_bbox(bbox, max_shape):
     bbox[6] = min(max_shape[2] - 1, bbox[6] + 1)
 
     return bbox
+
+
+def create_compressed(dataset, *args, **kwargs):
+    return dataset.create_dataset(
+        *args, **kwargs, compression="gzip", chunks=CHUNK_SIZE
+    )

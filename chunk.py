@@ -1,6 +1,6 @@
 import numpy as np
 import h5py
-from utils import pad_vol
+from utils import create_compressed, pad_vol
 from imu.io import get_bb_all3d
 from unionfind import UnionFind
 import itertools
@@ -325,8 +325,8 @@ def _chunk_half_extend_cc3d(params, vol, zyx_idx, mask, group_cache, connectivit
         ),
         axis=-1,
     ).reshape(-1, zyx_idx.shape[-1] + 1)
-    dataset_neighbors = group_cache.create_dataset(
-        f"-{z},{y},{x}", neighbors.shape, dtype=neighbors.dtype
+    dataset_neighbors = create_compressed(
+        group_cache, f"-{z},{y},{x}", neighbors.shape, dtype=neighbors.dtype
     )
     dataset_neighbors[:] = neighbors
 
@@ -350,7 +350,9 @@ def chunk_cc3d(
 
     if "cache" in group_cache:
         del group_cache["cache"]
-    dataset_cache = group_cache.create_dataset("cache", (*vol.shape, 3), dtype="uint16")
+    dataset_cache = create_compressed(
+        group_cache, "cache", (*vol.shape, 3), dtype="uint16"
+    )
     zyx_idx = simple_chunk(
         [dataset_cache],
         vol.shape,

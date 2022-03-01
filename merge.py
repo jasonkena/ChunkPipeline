@@ -5,6 +5,7 @@ from tqdm import tqdm
 from glob import glob
 from pathlib import Path
 from settings import *
+from utils import create_compressed
 
 import os
 import sys
@@ -22,7 +23,8 @@ def main(output_path, inputs, idx):
         h5py.File(os.path.join("extracted", f"{idx[i]}.h5")).get("row")
         for i in range(len(inputs))
     ]
-    final = final_output.create_dataset(
+    final = create_compressed(
+        final_output,
         "main",
         shape=h5py.File("seg_den_6nm.h5").get("main").shape,
         compression="gzip",

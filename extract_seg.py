@@ -4,7 +4,7 @@ import os
 import sys
 import chunk
 from settings import *
-from utils import extend_bbox
+from utils import extend_bbox, create_compressed
 
 
 def main(input_path, id):
@@ -18,12 +18,13 @@ def main(input_path, id):
         return
     extracted = h5py.File(os.path.join(input_path, f"{row[0]}.h5"), "w")
 
-    main = extracted.create_dataset(
+    main = create_compressed(
+        extracted,
         "main",
         shape=(row[2] - row[1] + 1, row[4] - row[3] + 1, row[6] - row[5] + 1),
         dtype=bool,
     )
-    extracted.create_dataset("row", data=row)
+    create_compressed(extracted, "row", data=row)
 
     chunk.get_seg(main, all.get("main"), row, CHUNK_SIZE, True, NUM_WORKERS)
 
