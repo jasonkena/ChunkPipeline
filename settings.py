@@ -9,3 +9,6 @@ CONNECTIVITY = 26
 MAX_ERODE = 50
 ERODE_DELTA = 5
 NUM_ITER = 1
+
+# merging hyperparameters
+NUM_DENDRITES = 50
