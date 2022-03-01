@@ -40,7 +40,7 @@ def main(input_path, id):
 
     # NOTE: NOTE: NOTE: rewrite this to use get_seg
     output = chunk.chunk_argwhere(
-        [all, new_spine],
+        [all.get("main"), new_spine],
         CHUNK_SIZE,
         lambda params, all, spine: chunk_func_spine(params, all, spine),
         "extend",
