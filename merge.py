@@ -23,7 +23,11 @@ def main(output_path, inputs, idx):
         for i in range(len(inputs))
     ]
     final = final_output.create_dataset(
-        "main", shape=h5py.File("seg_den_6nm.h5").get("main").shape, dtype="uint16"
+        "main",
+        shape=h5py.File("seg_den_6nm.h5").get("main").shape,
+        compression="gzip",
+        chunks=CHUNK_SIZE,
+        dtype="uint16",
     )
 
     files = [h5py.File(i) for i in inputs]
