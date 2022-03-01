@@ -12,7 +12,7 @@ def main(input_path, id):
 
     # id is in range(50)
     all = h5py.File(os.path.join(input_path, "seg_den_6nm.h5"))
-    row = extend_bbox(bboxes[id], all.get("main").shape)
+    row = extend_bbox(bboxes[id - 1], all.get("main").shape)
 
     output_file = os.path.join("extracted", f"{row[0]}.h5")
     if os.path.exists(output_file):

@@ -345,6 +345,27 @@ class ChunkTest(unittest.TestCase):
 
         self.assertTrue(np.array_equal(seg[:], gt))
 
+        # test merge_seg
+        chunk.merge_seg(
+            f.create_dataset(
+                "reverse_output",
+                shape=shape,
+                dtype="uint16",
+            ),
+            f.create_dataset(
+                "reverse_input",
+                data=input[
+                    bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1
+                ],
+            ),
+            bbox,
+            chunk_size,
+            lambda a, b: a + b,
+            num_workers,
+        )
+
+        self.assertTrue(np.array_equal(input, f.get("reverse_output")[:]))
+
 
 if __name__ == "__main__":
     unittest.main()

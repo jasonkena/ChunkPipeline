@@ -178,7 +178,9 @@ def simple_chunk(
                 elif pad == "extend" or pad == "half_extend":
                     output[i] = output[i][inputs["shrink_slices"]]
                 if len(output[i].shape) > 3:
-                    dataset_outputs[i][inputs["original_slices"]] = np.broadcast_to(output[i], dataset_outputs[i][inputs["original_slices"]].shape)
+                    dataset_outputs[i][inputs["original_slices"]] = np.broadcast_to(
+                        output[i], dataset_outputs[i][inputs["original_slices"]].shape
+                    )
                 else:
                     dataset_outputs[i][inputs["original_slices"]] = output[i]
             else:
@@ -348,9 +350,7 @@ def chunk_cc3d(
 
     if "cache" in group_cache:
         del group_cache["cache"]
-    dataset_cache = group_cache.create_dataset(
-        "cache", (*vol.shape, 3), dtype="uint16"
-    )
+    dataset_cache = group_cache.create_dataset("cache", (*vol.shape, 3), dtype="uint16")
     zyx_idx = simple_chunk(
         [dataset_cache],
         vol.shape,
@@ -593,6 +593,36 @@ def get_seg(output, vol, bbox, chunk_size, filter_id, num_workers):
         bbox=bbox,
         bbox_in=bbox,
         filter_id=filter_id,
+    )
+    return output
+
+
+def _chunk_reverse_write_seg(params, vol, output, bbox_in, merge_func):
+    z, y, x, chunk_size = [params[i] for i in ["z", "y", "x", "chunk_size"]]
+    # NOTE: will need to rewrite this to implement parallelism
+    idx = [z, y, x]
+    # extra +1 due to bbox format
+    write_slices = tuple(
+        slice(
+            idx[i] * chunk_size[i] + bbox_in[2 * i + 1],
+            idx[i] * chunk_size[i] + bbox_in[2 * i + 1] + vol.shape[i],
+        )
+        for i in range(3)
+    )
+    output[write_slices] = merge_func(output[write_slices], vol)
+
+
+def merge_seg(output, vol, bbox, chunk_size, merge_func, num_workers):
+    simple_chunk(
+        [],
+        [vol],
+        chunk_size,
+        _chunk_reverse_write_seg,
+        num_workers,
+        pass_params=True,
+        output=output,
+        bbox_in=bbox,
+        merge_func=merge_func,
     )
     return output
 

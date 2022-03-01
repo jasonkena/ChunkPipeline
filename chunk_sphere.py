@@ -227,7 +227,12 @@ def extract(
         k=False,
     )
     voxel_counts = np.concatenate([largest_voxel_counts[1:], voxel_counts[1:]])
-    voxel_counts = np.concatenate([[vol.shape[0]*vol.shape[1]*vol.shape[2]-np.sum(voxel_counts)], voxel_counts])
+    voxel_counts = np.concatenate(
+        [
+            [vol.shape[0] * vol.shape[1] * vol.shape[2] - np.sum(voxel_counts)],
+            voxel_counts,
+        ]
+    )
 
     print(f"voxel_counts: {voxel_counts}")
 

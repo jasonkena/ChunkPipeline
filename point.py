@@ -16,40 +16,31 @@ def chunk_func_spine(params, all, spine):
 
 
 def main(input_path, id):
-    # NOTE: might need to rewrite this to use extracted/id.h5
     # id is in range(50)
-    all = h5py.File(os.path.join(input_path, "seg_den_6nm.h5"))
+    all = h5py.File(os.path.join(input_path, f"{str(id-1)}.h5"))
     spine = h5py.File(os.path.join(input_path, "seg_den_spine_6nm.h5"))
     cache = h5py.File(os.path.join(input_path, "cache.h5"), "w")
 
     bboxes = np.load(os.path.join(input_path, "den_6nm_bb.npy")).astype(int)
-    row = extend_bbox(bboxes[id], all.get("main").shape)
+    row = extend_bbox(bboxes[id - 1], spine.get("main").shape)
 
     output_file = os.path.join("results", f"{row[0]}.npy")
     if os.path.exists(output_file):
         return
 
-    new_all = cache.create_dataset(
-        "new_all",
-        shape=(row[2] - row[1] + 1, row[4] - row[3] + 1, row[6] - row[5] + 1),
-        dtype="u1",
-    )
     new_spine = cache.create_dataset(
         "new_spine",
         shape=(row[2] - row[1] + 1, row[4] - row[3] + 1, row[6] - row[5] + 1),
         dtype="uint16",
     )
 
-    new_all = chunk.get_seg(
-        new_all, all.get("main"), row, CHUNK_SIZE, True, NUM_WORKERS
-    )
     new_spine = chunk.get_seg(
         new_spine, spine.get("main"), row, CHUNK_SIZE, True, NUM_WORKERS
     )
 
     # NOTE: NOTE: NOTE: rewrite this to use get_seg
     output = chunk.chunk_argwhere(
-        [new_all, new_spine],
+        [all, new_spine],
         CHUNK_SIZE,
         lambda params, all, spine: chunk_func_spine(params, all, spine),
         "extend",
