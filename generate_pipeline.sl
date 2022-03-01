@@ -1,4 +1,4 @@
-#!/bin/tcsh
+#!/bin/tcsh -e
 #SBATCH --job-name=generate-points # Job name
 #SBATCH --array=1-50 # inclusive range
 #SBATCH --nodes=1
@@ -30,10 +30,14 @@ cp *.txt $TMPDIR
 cp *.h5 $TMPDIR
 cp *.npy $TMPDIR
 
-python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID
+if ( -f "$TMPDIR/$SLURM_ARRAY_TASK_ID.h5" ) then
+    cp extracted/$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
+else
+    python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID
+    cp $TMPDIR/$SLURM_ARRAY_TASK_ID.h5 extracted/
+endif
+
 echo extract_seg finished
-cp $TMPDIR/$SLURM_ARRAY_TASK_ID.h5 extracted/
-cp extracted/$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
 python3 point.py $TMPDIR $SLURM_ARRAY_TASK_ID
 echo point_generation finished
 python3 chunk_sphere.py $TMPDIR $SLURM_ARRAY_TASK_ID
