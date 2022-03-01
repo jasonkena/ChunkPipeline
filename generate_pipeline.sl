@@ -18,6 +18,10 @@ module load anaconda
 conda activate dendrite
 
 cd /mmfs1/data/adhinart/dendrite
+mkdir -p extracted
+# for points
+mkdir -p results 
+mkdir -p baseline
 
 setenv TMPDIR /scratch/adhinart/dendrite/$SLURM_ARRAY_TASK_ID
 rm -rf $TMPDIR
@@ -27,9 +31,12 @@ cp *.h5 $TMPDIR
 cp *.npy $TMPDIR
 
 python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID
+echo extract_seg finished
 cp extracted/$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
 python3 point.py $TMPDIR $SLURM_ARRAY_TASK_ID
+echo point_generation finished
 python3 chunk_sphere.py $TMPDIR $SLURM_ARRAY_TASK_ID
+echo baseline finished
 cp $TMPDIR/seg_$SLURM_ARRAY_TASK_ID.h5 baseline/
 
 rm -rf $TMPDIR
