@@ -32,6 +32,7 @@ cp *.npy $TMPDIR
 
 python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID
 echo extract_seg finished
+cp $TMPDIR/$SLURM_ARRAY_TASK_ID.h5 extracted/
 cp extracted/$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
 python3 point.py $TMPDIR $SLURM_ARRAY_TASK_ID
 echo point_generation finished
