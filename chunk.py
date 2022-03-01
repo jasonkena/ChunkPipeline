@@ -625,19 +625,3 @@ def merge_seg(output, vol, bbox, chunk_size, merge_func, num_workers):
         merge_func=merge_func,
     )
     return output
-
-
-if __name__ == "__main__":
-    # file = h5py.File("./den_ruilin_v2_16nm.h5").get("main")
-    chunk_size = (100, 100, 100)
-    idx = 1
-    file = h5py.File("./den_s24_16nm.h5").get("main")
-
-    output = h5py.File("test_single_idx.hdf5", "w")
-    output.create_dataset("single_idx", file.shape, dtype="b")
-    output.create_dataset("cc3d_output", file.shape, dtype="uint16")
-    single_idx = output.get("single_idx")
-    cc3d_output = output.get("cc3d_output")
-
-    simple_chunk(single_idx, [file], chunk_size, lambda vol: vol == idx)
-    chunk_cc3d(cc3d_output, single_idx, chunk_size, connectivity=26)

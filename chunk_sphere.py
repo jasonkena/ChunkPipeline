@@ -244,6 +244,7 @@ def extract(
         lambda expanded, cc3d_others: [cc3d_others + (cc3d_others > 0) + expanded],
         num_workers,
     )
+    group_cache.create_dataset("voxel_counts", data=voxel_counts)
 
     return seg
 
@@ -269,7 +270,7 @@ def main(input_path, id):
         NUM_WORKERS,
     )
     for key in group_cache.keys():
-        if key != "seg":
+        if key not in ["seg", "voxel_counts"]:
             del group_cache[key]
     output.close()
 
