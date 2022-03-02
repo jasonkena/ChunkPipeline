@@ -15,16 +15,16 @@ def chunk_func_spine(params, all, spine):
     return boundary[shrink_slices], spine[shrink_slices]
 
 
-def main(input_path, id):
+def main(base_path, input_path, id):
     # id is in range(50)
-    all = h5py.File(os.path.join(input_path, f"{str(id)}.h5"))
-    spine = h5py.File(os.path.join(input_path, "seg_den_spine_6nm.h5"))
-    cache = h5py.File(os.path.join(input_path, "cache.h5"), "w")
+    all = h5py.File(os.path.join(base_path, input_path, f"{str(id)}.h5"))
+    spine = h5py.File(os.path.join(base_path, input_path, "spine.h5"))
+    cache = h5py.File(os.path.join(base_path, input_path, "cache.h5"), "w")
 
-    bboxes = np.load(os.path.join(input_path, "den_6nm_bb.npy")).astype(int)
+    bboxes = np.load(os.path.join(base_path, input_path, "bbox.npy")).astype(int)
     row = extend_bbox(bboxes[id - 1], spine.get("main").shape)
 
-    output_file = os.path.join("results", f"{row[0]}.npy")
+    output_file = os.path.join(base_path, "results", f"{row[0]}.npy")
     if os.path.exists(output_file):
         return
 
@@ -54,4 +54,4 @@ def main(input_path, id):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], int(sys.argv[2]))
+    main(sys.argv[1], sys.argv[2], int(sys.argv[3]))

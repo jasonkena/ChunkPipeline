@@ -14,13 +14,13 @@ import json
 import chunk
 
 
-def main(output_path, inputs, idx):
+def main(base_path, inputs, idx):
     for i in idx:
         assert i <= NUM_DENDRITES
 
-    final_output = h5py.File(os.path.join(output_path, "final.h5"), "w")
+    final_output = h5py.File(os.path.join(base_path, "final.h5"), "w")
     bboxes = [
-        h5py.File(os.path.join("extracted", f"{idx[i]}.h5")).get("row")
+        h5py.File(os.path.join(base_path, "extracted", f"{idx[i]}.h5")).get("row")
         for i in range(len(inputs))
     ]
     final = create_compressed(
@@ -72,7 +72,7 @@ def main(output_path, inputs, idx):
 
 
 if __name__ == "__main__":
-    inputs = sorted(glob("baseline/*"))
+    inputs = sorted(glob(os.path.join(sys.argv[1], "baseline/*")))
     idx = [int(Path(i).stem.split("_")[1]) for i in inputs]
     # list of ids to select
     filter = []
