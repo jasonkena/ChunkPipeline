@@ -11,8 +11,7 @@ REDIS_URL = "redis://:CR2Oe76Mrl8UTOBop7ulmklF80kXJbc1@redis-11424.c277.us-east-
 # baseline related hyperparameters
 CONNECTIVITY = 26
 MAX_ERODE = 50
-ERODE_DELTA = 5
-NUM_ITER = 1
+ERODE_DELTA = 50
 
 # merging hyperparameters
 NUM_DENDRITES = 50
