@@ -14,8 +14,6 @@ def main(base_path, id):
     all = h5py.File(os.path.join(base_path, "raw.h5"))
     row = extend_bbox(bboxes[id - 1], all.get("main").shape)
 
-    if os.path.exists(os.path.join("extracted", f"{row[0]}.h5")):
-        return
     extracted = h5py.File(os.path.join(base_path, f"{row[0]}.h5"), "w")
 
     main = create_compressed(
