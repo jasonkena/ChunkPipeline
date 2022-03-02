@@ -24,7 +24,7 @@ def main(base_path, id):
     bboxes = np.load(os.path.join(base_path, "bbox.npy")).astype(int)
     row = extend_bbox(bboxes[id - 1], spine.get("main").shape)
 
-    output_file = os.path.join(base_path, "results", f"{row[0]}.npy")
+    output_file = os.path.join(base_path, f"{row[0]}.npy")
     if os.path.exists(output_file):
         return
 
