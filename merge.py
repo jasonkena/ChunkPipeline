@@ -26,7 +26,7 @@ def main(base_path, inputs, idx):
     final = create_compressed(
         final_output,
         "main",
-        shape=h5py.File("seg_den_6nm.h5").get("main").shape,
+        shape=h5py.File(os.path.join(base_path, "raw.h5")).get("main").shape,
         dtype="uint16",
     )
 

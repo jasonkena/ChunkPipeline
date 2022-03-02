@@ -34,6 +34,7 @@ def extend_bbox(bbox, max_shape):
 
 def create_compressed(dataset, *args, **kwargs):
     chunks = None
+    # TODO: report this
     if "shape" in kwargs:
         if len(kwargs["shape"]) == 3:
             if not any([kwargs["shape"][i] < CHUNK_SIZE[i] for i in range(3)]):
