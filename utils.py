@@ -44,4 +44,4 @@ def create_compressed(dataset, *args, **kwargs):
             *args, **kwargs, compression="gzip", chunks=chunks
         )
     else:
-        return dataset.create_dataset(*args, **kwargs, compression="gzip")
+        return dataset.create_dataset(*args, **kwargs)
