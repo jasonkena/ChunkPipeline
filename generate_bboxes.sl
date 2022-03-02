@@ -6,8 +6,10 @@
 #SBATCH --mail-type=BEGIN,END,FAIL. # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=adhinart@bc.edu # Where to send mail
 
+setenv BASE_PATH human
+
 cd /mmfs1/data/adhinart/dendrite
 module load anaconda
 conda activate dendrite
 
-python generate_bboxes.py
+python generate_bboxes.py $BASE_PATH

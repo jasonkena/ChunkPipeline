@@ -18,6 +18,10 @@ module load anaconda
 conda activate dendrite
 
 setenv BASE_PATH mouse
+setenv TMPDIR /scratch/adhinart/dendrite/$SLURM_ARRAY_TASK_ID/$BASE_PATH
+
+rm -rf $TMPDIR
+mkdir -p $TMPDIR
 
 cd /mmfs1/data/adhinart/dendrite/$BASE_PATH
 mkdir -p extracted
@@ -25,25 +29,34 @@ mkdir -p extracted
 mkdir -p results 
 mkdir -p baseline
 
-setenv TMPDIR /scratch/adhinart/dendrite/$SLURM_ARRAY_TASK_ID/$BASE_PATH
-rm -rf $TMPDIR
-mkdir -p $TMPDIR
-cp *.txt $TMPDIR
 cp *.h5 $TMPDIR
 cp *.npy $TMPDIR
 
+cd ..
+
 if ( -f "$BASE_PATH/extracted/$SLURM_ARRAY_TASK_ID.h5" ) then
+    echo Extraction already exists
     cp $BASE_PATH/extracted/$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
 else
-    python3 extract_seg.py $BASE_PATH $TMPDIR $SLURM_ARRAY_TASK_ID
+    python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID
     cp $TMPDIR/$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/extracted/
 endif
 
 echo extract_seg finished
-python3 point.py $TMPDIR $SLURM_ARRAY_TASK_ID
+if ( -f "$BASE_PATH/results/$SLURM_ARRAY_TASK_ID.npy" ) then
+    echo Points already exist
+else
+    python3 point.py $TMPDIR $SLURM_ARRAY_TASK_ID
+    cp $TMPDIR/$SLURM_ARRAY_TASK_ID.npy $BASE_PATH/results/
+endif
 echo point_generation finished
-python3 chunk_sphere.py $TMPDIR $SLURM_ARRAY_TASK_ID
+
+if ( -f "$BASE_PATH/baseline/seg_$SLURM_ARRAY_TASK_ID.h5" ) then
+    echo Baseline already exists
+else
+    python3 chunk_sphere.py $TMPDIR $SLURM_ARRAY_TASK_ID
+    cp $TMPDIR/seg_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/baseline/
+endif
 echo baseline finished
-#cp $TMPDIR/seg_$SLURM_ARRAY_TASK_ID.h5 baseline/
 
 rm -rf $TMPDIR
