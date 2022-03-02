@@ -203,12 +203,12 @@ def extract(
     return seg
 
 
-def main(base_path, input_path, id):
+def main(base_path, id):
     if os.path.exists(os.path.join(base_path, "baseline", f"{str(id)}.h5")):
         return
 
-    input = h5py.File(os.path.join(base_path, input_path, f"{str(id)}.h5"))
-    output = h5py.File(os.path.join(base_path, input_path, f"seg_{str(id)}.h5"), "w")
+    input = h5py.File(os.path.join(base_path, f"{str(id)}.h5"))
+    output = h5py.File(os.path.join(base_path, f"seg_{str(id)}.h5"), "w")
     # no need to create actual group
     group_cache = output
 
@@ -235,4 +235,4 @@ def main(base_path, input_path, id):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], int(sys.argv[3]))
+    main(sys.argv[1], int(sys.argv[2]))

@@ -7,16 +7,16 @@ from settings import *
 from utils import extend_bbox, create_compressed
 
 
-def main(base_path, input_path, id):
-    bboxes = np.load(os.path.join(base_path, input_path, "bbox.npy")).astype(int)
+def main(base_path, id):
+    bboxes = np.load(os.path.join(base_path, "bbox.npy")).astype(int)
 
     # id is in range(50)
-    all = h5py.File(os.path.join(base_path, input_path, "raw.h5"))
+    all = h5py.File(os.path.join(base_path, "raw.h5"))
     row = extend_bbox(bboxes[id - 1], all.get("main").shape)
 
-    if os.path.exists(os.path.join(base_path, "extracted", f"{row[0]}.h5")):
+    if os.path.exists(os.path.join("extracted", f"{row[0]}.h5")):
         return
-    extracted = h5py.File(os.path.join(base_path, input_path, f"{row[0]}.h5"), "w")
+    extracted = h5py.File(os.path.join(base_path, f"{row[0]}.h5"), "w")
 
     main = create_compressed(
         extracted,
@@ -32,4 +32,4 @@ def main(base_path, input_path, id):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], int(sys.argv[3]))
+    main(sys.argv[1], int(sys.argv[2]))
