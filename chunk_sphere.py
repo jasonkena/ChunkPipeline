@@ -192,7 +192,7 @@ def extract(
 
     seg = chunk.simple_chunk(
         [create_compressed(group_cache, "seg", others.shape, dtype="uint16")],
-        [trunk , cc3d_others],
+        [trunk, cc3d_others],
         chunk_size,
         # relabel so that trunk is idx 1
         lambda trunk, cc3d_others: [cc3d_others + (cc3d_others > 0) + trunk],
@@ -225,6 +225,12 @@ def main(input_path, id):
     for key in group_cache.keys():
         if key not in ["seg", "voxel_counts"]:
             del group_cache[key]
+
+    create_compressed(
+        group_cache,
+        "seg_bbox",
+        data=chunk.chunk_bbox(output.get("seg"), CHUNK_SIZE, NUM_WORKERS),
+    )
     output.close()
 
 
