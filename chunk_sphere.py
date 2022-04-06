@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import math
 import os
 import sys
+import expand_parabola
 from settings import *
 
 
@@ -42,6 +43,23 @@ def get_boundary(boundary_dataset, vol, chunk_size, num_workers):
         num_workers,
         pad="extend",
     )
+
+
+def _get_expand_edt(vol, anisotropy):
+    if not vol.flags["C_CONTIGUOUS"]:
+        vol = np.ascontiguousarray(vol)
+
+    result = (
+        expand_parabola.expand_edt(
+            vol,
+            anisotropy=anisotropy,
+            order="C",  # was C
+            parallel=0,  # max CPU
+        )
+        <= 0
+    )
+
+    return [result]
 
 
 def _get_dt(vol, anisotropy, black_border):
@@ -92,6 +110,45 @@ def get_dt(
     )
 
 
+def sphere_iteration(
+    group_cache,
+    expanded,
+    dt,
+    vol,
+    threshold,
+    anisotropy,
+    chunk_size,
+    num_workers,
+):
+    # performs sphere_iteration on volumes that may already be dilated
+    # dt: edt from background in original volume
+    # vol: original volume
+    # erode_delta: nm, how much to dilate beyond edt
+    # anisotropy: [z-size, y-size, x-size]
+    # returns newly dilated volume
+
+    pad_width = [math.ceil(threshold / i) for i in anisotropy]
+    chunk.simple_chunk(
+        [create_compressed(group_cache, "new_expanded", expanded.shape, dtype=bool)],
+        [expanded, dt, vol],
+        chunk_size,
+        lambda expanded, dt, vol: [
+            np.logical_and(
+                _get_expand_edt(expanded * (dt + threshold), anisotropy=anisotropy)[0],
+                vol,
+            )
+        ],
+        num_workers,
+        pad="extend",
+        pad_width=pad_width,
+    )
+
+    del group_cache["expanded"]
+    group_cache.move("new_expanded", "expanded")
+
+    return group_cache.get("expanded")
+
+
 def extract(
     group_cache,
     vol,
@@ -100,6 +157,7 @@ def extract(
     connectivity,
     max_erode,
     erode_delta,
+    num_iter,
     num_workers,
 ):
     # gets volume segmentation
@@ -117,7 +175,7 @@ def extract(
         chunk_size,
         anisotropy,
         black_border=False,
-        threshold=max_erode,
+        threshold=max_erode + erode_delta,
         num_workers=num_workers,
     )
     remaining = chunk.simple_chunk(
@@ -137,37 +195,25 @@ def extract(
         num_workers,
         k=1,
     )
-    inverted = chunk.simple_chunk(
-        [create_compressed(group_cache, "inverted", expanded.shape, dtype=bool)],
-        [expanded],
-        chunk_size,
-        lambda expanded: [expanded == 0],
-        num_workers,
-    )
-    inverse_dt = get_dt(
-        create_compressed(group_cache, "inverse_dt", inverted.shape, dtype="f"),
-        inverted,
-        chunk_size,
-        anisotropy,
-        black_border=False,
-        threshold=max_erode + erode_delta,
-        num_workers=num_workers,
-    )
-    trunk = chunk.simple_chunk(
-        [create_compressed(group_cache, "trunk", inverse_dt.shape, dtype=bool)],
-        [inverse_dt, vol],
-        chunk_size,
-        lambda inverse_dt, vol: [
-            np.logical_and(inverse_dt <= max_erode + erode_delta, vol)
-        ],
-        num_workers,
-    )
+
+    # TODO: assert that final segmentation is only composed of single CC
+    for _ in range(num_iter):
+        expanded = sphere_iteration(
+            group_cache,
+            expanded,
+            dt,
+            vol,
+            max_erode + erode_delta,
+            anisotropy,
+            chunk_size,
+            num_workers,
+        )
 
     others = chunk.simple_chunk(
-        [create_compressed(group_cache, "others", shape=trunk.shape, dtype=bool)],
-        [vol, trunk],
+        [create_compressed(group_cache, "others", shape=expanded.shape, dtype=bool)],
+        [vol, expanded],
         chunk_size,
-        lambda vol, trunk: [np.logical_xor(vol, trunk)],
+        lambda vol, expanded: [np.logical_xor(vol, expanded)],
         num_workers,
     )
     # segment the non trunks
@@ -184,7 +230,7 @@ def extract(
     voxel_counts = np.concatenate(
         [
             [vol.shape[0] * vol.shape[1] * vol.shape[2] - np.sum(voxel_counts)],
-            voxel_counts,
+            [voxel_counts],
         ]
     )
 
@@ -192,10 +238,10 @@ def extract(
 
     seg = chunk.simple_chunk(
         [create_compressed(group_cache, "seg", others.shape, dtype="uint16")],
-        [trunk, cc3d_others],
+        [expanded, cc3d_others],
         chunk_size,
         # relabel so that trunk is idx 1
-        lambda trunk, cc3d_others: [cc3d_others + (cc3d_others > 0) + trunk],
+        lambda expanded, cc3d_others: [cc3d_others + (cc3d_others > 0) + expanded],
         num_workers,
     )
     create_compressed(group_cache, "voxel_counts", data=voxel_counts)
@@ -220,6 +266,7 @@ def main(base_path, id):
         CONNECTIVITY,
         MAX_ERODE,
         ERODE_DELTA,
+        NUM_ITER,
         NUM_WORKERS,
     )
     for key in group_cache.keys():
