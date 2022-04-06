@@ -230,7 +230,7 @@ def extract(
     voxel_counts = np.concatenate(
         [
             [vol.shape[0] * vol.shape[1] * vol.shape[2] - np.sum(voxel_counts)],
-            [voxel_counts],
+            voxel_counts,
         ]
     )
 
