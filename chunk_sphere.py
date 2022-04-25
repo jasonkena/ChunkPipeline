@@ -244,7 +244,7 @@ def extract(
         lambda expanded, cc3d_others: [cc3d_others + (cc3d_others > 0) + expanded],
         num_workers,
     )
-    create_compressed(group_cache, "voxel_counts", data=voxel_counts)
+    group_cache.create_dataset("voxel_counts", data=voxel_counts)
 
     return seg
 
@@ -273,11 +273,10 @@ def main(base_path, id):
         if key not in ["seg", "voxel_counts"]:
             del group_cache[key]
 
-    create_compressed(
-        group_cache,
-        "seg_bbox",
-        data=chunk.chunk_bbox(output.get("seg"), CHUNK_SIZE, NUM_WORKERS),
-    )
+        group_cache.create_dataset(
+            "seg_bbox",
+            data=chunk.chunk_bbox(output.get("seg"), CHUNK_SIZE, NUM_WORKERS),
+        )
     output.close()
 
 
