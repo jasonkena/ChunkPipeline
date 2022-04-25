@@ -32,13 +32,14 @@ def extend_bbox(bbox, max_shape):
     return bbox
 
 
-def create_compressed(dataset, shape=None, *args, **kwargs):
+def create_compressed(dataset, name, shape=None, *args, **kwargs):
     chunks = None
     if shape is not None:
         if len(shape) == 3:
             if not any([shape[i] < CHUNK_SIZE[i] for i in range(3)]):
                 chunks = CHUNK_SIZE
 
+    kwargs["name"] = name
     kwargs["shape"] = shape
 
     if chunks is not None:
