@@ -1,6 +1,6 @@
 #!/bin/tcsh -e
 #SBATCH --job-name=generate-points # Job name
-#SBATCH --array=1-50 # inclusive range
+#SBATCH --array=1-10 # inclusive range
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task 20 # 1 cpu on single node
@@ -17,7 +17,7 @@ module purge
 module load anaconda
 conda activate dendrite
 
-setenv BASE_PATH den_seg
+setenv BASE_PATH mouse
 setenv TMPDIR /scratch/adhinart/dendrite/$SLURM_ARRAY_TASK_ID/$BASE_PATH
 
 rm -rf $TMPDIR

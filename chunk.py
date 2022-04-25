@@ -235,10 +235,12 @@ def chunk_bbox(vol, chunk_size, num_workers):
     bboxes = simple_chunk(
         [None], [vol], chunk_size, _chunk_bbox, num_workers, pass_params=True
     )
-    if bboxes.size == 0:
-        print("Empty bbox")
-        return np.array([])
-    bboxes = np.concatenate(bboxes.reshape(-1).tolist(), axis=0)
+    bboxes = bboxes.reshape(-1, *bboxes.shape[3:])
+    # check if bboxes is object or raw numbers
+    if len(bboxes.shape) == 1:
+        # flatten
+        bboxes = [i for bbox in bboxes for i in bbox]
+        bboxes = np.stack(bboxes)
     bboxes = bboxes[np.argsort(bboxes[:, 0])]
     assert not np.any(bboxes[:, 0] == 0)
 
@@ -252,7 +254,7 @@ def chunk_bbox(vol, chunk_size, num_workers):
             result[-1][j] = np.min(bboxes[idx[i] : idx[i + 1], j])
         for j in [2, 4, 6]:
             result[-1][j] = np.max(bboxes[idx[i] : idx[i + 1], j])
-    return np.array(result)
+    return np.array(result, dtype=int)
 
 
 def _chunk_cc3d_neighbors(
