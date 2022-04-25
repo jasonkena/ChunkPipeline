@@ -235,6 +235,9 @@ def chunk_bbox(vol, chunk_size, num_workers):
     bboxes = simple_chunk(
         [None], [vol], chunk_size, _chunk_bbox, num_workers, pass_params=True
     )
+    if bboxes.size == 0:
+        print("Empty bbox")
+        return np.array([])
     bboxes = np.concatenate(bboxes.reshape(-1).tolist(), axis=0)
     bboxes = bboxes[np.argsort(bboxes[:, 0])]
     assert not np.any(bboxes[:, 0] == 0)
