@@ -1,3 +1,4 @@
+# data storage will be at chunk size CHUNK_SIZE[i] // 2
 CHUNK_SIZE = (500, 500, 500)
 NUM_WORKERS = 20
 ANISOTROPY = (30, 6, 6)

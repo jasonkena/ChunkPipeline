@@ -339,10 +339,8 @@ def _chunk_half_extend_cc3d(params, vol, zyx_idx, mask, group_cache, connectivit
         ),
         axis=-1,
     ).reshape(-1, zyx_idx.shape[-1] + 1)
-    dataset_neighbors = create_compressed(
-        group_cache, f"-{z},{y},{x}", neighbors.shape, dtype=neighbors.dtype
-    )
-    dataset_neighbors[:] = neighbors
+
+    group_cache.create_dataset(f"-{z},{y},{x}", data=neighbors)
 
     # will be trimmed automatically
     return [connected_components]

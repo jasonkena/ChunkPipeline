@@ -1,5 +1,5 @@
 #!/bin/tcsh -e
-#SBATCH --job-name=generate-points # Job name
+#SBATCH --job-name=generate-pipeline # Job name
 #SBATCH --array=1-10 # inclusive range
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -10,8 +10,8 @@
 #SBATCH --mail-user=adhinart@bc.edu # Where to send mail
 #SBATCH --partition=partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100
 
-# assumes that den_6nm_bb.npy exists
-# entire pipeline for generating files base h5 up to the final segmentation, + point generation
+# assumes that raw.h5, spine.h5, bbox.npy exists
+# entire pipeline for generating files base h5 up to the final segmentation + point generation
 # merge has to be run manually
 module purge
 module load anaconda
@@ -26,7 +26,7 @@ mkdir -p $TMPDIR
 cd /mmfs1/data/adhinart/dendrite/$BASE_PATH
 mkdir -p extracted
 # for points
-mkdir -p results 
+mkdir -p results
 mkdir -p baseline
 
 cp *.h5 $TMPDIR

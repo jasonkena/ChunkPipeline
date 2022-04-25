@@ -22,7 +22,7 @@ def main(base_path, id):
         shape=(row[2] - row[1] + 1, row[4] - row[3] + 1, row[6] - row[5] + 1),
         dtype=bool,
     )
-    create_compressed(extracted, "row", data=row)
+    extracted.create_dataset("row", data=row)
 
     chunk.get_seg(main, all.get("main"), row, CHUNK_SIZE, True, NUM_WORKERS)
 
