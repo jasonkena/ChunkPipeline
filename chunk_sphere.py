@@ -273,10 +273,10 @@ def main(base_path, id):
         if key not in ["seg", "voxel_counts"]:
             del group_cache[key]
 
-        group_cache.create_dataset(
-            "seg_bbox",
-            data=chunk.chunk_bbox(output.get("seg"), CHUNK_SIZE, NUM_WORKERS),
-        )
+    group_cache.create_dataset(
+        "seg_bbox",
+        data=chunk.chunk_bbox(output.get("seg"), CHUNK_SIZE, NUM_WORKERS),
+    )
     output.close()
 
 
