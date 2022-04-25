@@ -17,7 +17,7 @@ module purge
 module load anaconda
 conda activate dendrite
 
-setenv BASE_PATH mouse
+setenv BASE_PATH den_seg
 setenv TMPDIR /scratch/adhinart/dendrite/$SLURM_ARRAY_TASK_ID/$BASE_PATH
 
 rm -rf $TMPDIR
