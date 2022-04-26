@@ -115,7 +115,7 @@ def sphere_iteration(
     expanded,
     dt,
     vol,
-    threshold,
+    erode_delta,
     anisotropy,
     chunk_size,
     num_workers,
@@ -134,7 +134,9 @@ def sphere_iteration(
         chunk_size,
         lambda expanded, dt, vol: [
             np.logical_and(
-                _get_expand_edt(expanded * (dt + threshold), anisotropy=anisotropy)[0],
+                _get_expand_edt(expanded * (dt + erode_delta), anisotropy=anisotropy)[
+                    0
+                ],
                 vol,
             )
         ],
@@ -203,7 +205,7 @@ def extract(
             expanded,
             dt,
             vol,
-            max_erode + erode_delta,
+            erode_delta,
             anisotropy,
             chunk_size,
             num_workers,
