@@ -241,6 +241,10 @@ def chunk_bbox(vol, chunk_size, num_workers):
         # flatten
         bboxes = [i for bbox in bboxes for i in bbox]
         bboxes = np.stack(bboxes)
+    else:
+        bboxes = bboxes.reshape(-1, 7)
+    assert bboxes.shape[1] == 7 and len(bboxes.shape) == 2
+
     bboxes = bboxes[np.argsort(bboxes[:, 0])]
     assert not np.any(bboxes[:, 0] == 0)
 

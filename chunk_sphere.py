@@ -269,14 +269,17 @@ def main(base_path, id):
         NUM_ITER,
         NUM_WORKERS,
     )
+
+    voxel_counts = group_cache.get("voxel_counts")[:]
     for key in group_cache.keys():
-        if key not in ["seg", "voxel_counts"]:
+        if key != "seg":
             del group_cache[key]
 
-    group_cache.create_dataset(
-        "seg_bbox",
-        data=chunk.chunk_bbox(output.get("seg"), CHUNK_SIZE, NUM_WORKERS),
-    )
+    bboxes = chunk.chunk_bbox(output.get("seg"), CHUNK_SIZE, NUM_WORKERS)[:]
+    # cat voxel_counts to end of bboxes, removing background voxel countvc
+    seg_bbox = np.concatenate((bboxes, voxel_counts[1:].reshape(-1, 1)), axis=1)
+
+    group_cache.create_dataset("seg_bbox", data=seg_bbox)
     output.close()
 
 
