@@ -9,7 +9,7 @@ NUM_RETRY = 3
 # baseline related hyperparameters
 CONNECTIVITY = 26
 MAX_ERODE = 100
-ERODE_DELTA = 25
+ERODE_DELTA = 100
 NUM_ITER = 1
 
 # merging hyperparameters

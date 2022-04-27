@@ -49,17 +49,19 @@ def _get_expand_edt(vol, anisotropy):
     if not vol.flags["C_CONTIGUOUS"]:
         vol = np.ascontiguousarray(vol)
 
-    result = (
-        expand_parabola.expand_edt(
-            vol,
-            anisotropy=anisotropy,
-            order="C",  # was C
-            parallel=0,  # max CPU
-        )
-        <= 0
+    if np.max(vol) == 0:
+        return [np.zeros_like(vol, dtype=bool)]
+
+    result = expand_parabola.expand_edt(
+        vol,
+        anisotropy=anisotropy,
+        order="C",  # was C
+        parallel=0,  # max CPU
     )
 
-    return [result]
+    assert np.all(np.isfinite(result))
+
+    return [result<0]
 
 
 def _get_dt(vol, anisotropy, black_border):
@@ -127,7 +129,7 @@ def sphere_iteration(
     # anisotropy: [z-size, y-size, x-size]
     # returns newly dilated volume
 
-    pad_width = [math.ceil(threshold / i) for i in anisotropy]
+    pad_width = [math.ceil(erode_delta / i) for i in anisotropy]
     chunk.simple_chunk(
         [create_compressed(group_cache, "new_expanded", expanded.shape, dtype=bool)],
         [expanded, dt, vol],
@@ -198,6 +200,7 @@ def extract(
         k=1,
     )
 
+    # NOTE: largest_voxel_counts is wrong for sphere_iteration
     # TODO: assert that final segmentation is only composed of single CC
     for _ in range(num_iter):
         expanded = sphere_iteration(
