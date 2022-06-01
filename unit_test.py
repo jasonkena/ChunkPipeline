@@ -7,11 +7,13 @@ import os
 import torch
 import torch.nn.functional as F
 from utils import pad_vol
+import math
 
 from imu.io import get_bb_all3d
 import opensimplex
 import edt
 from chunk_sphere import get_dt, get_boundary, _chunk_get_boundary, _get_dt
+from inference import _chunk_seed, _chunk_max_pool
 from point import chunk_func_spine
 
 
@@ -365,6 +367,64 @@ class ChunkTest(unittest.TestCase):
         )
 
         self.assertTrue(np.array_equal(input, f.get("reverse_output")[:]))
+
+    def test_chunk_seed(self):
+        dim = 5
+        num_points = 100
+        chunk_size = (9, 8, 7)
+        num_workers = 2
+
+        points = np.unique(np.random.randint(0, dim, (num_points, 3)), axis=0)
+        num_points = points.shape[0]
+        pred = np.random.rand(num_points).astype(np.float16)
+
+        gt = np.zeros((dim, dim, dim))
+        gt[points[:, 0], points[:, 1], points[:, 2]] = pred
+
+        f = h5py.File("test.hdf5", "w")
+        f.create_dataset("input", shape=[dim, dim, dim], dtype="f")
+        f.create_dataset("output", shape=[dim, dim, dim], dtype="f")
+        output = chunk.simple_chunk(
+            [f.get("output")],
+            [f.get("input")],
+            chunk_size,
+            _chunk_seed,
+            num_workers,
+            pass_params=True,
+            points=points,
+            pred=pred,
+        )
+
+        self.assertTrue(np.array_equal(gt, output[:]))
+
+    def test_chunk_max_pool(self):
+        shape = (100, 100, 100)
+        input = generate_simplex_noise(shape, 0.1)
+        chunk_size = (9, 8, 7)
+        num_workers = 2
+
+        f = h5py.File("test.hdf5", "w")
+        f.create_dataset("input", data=input)
+
+        gt = F.max_pool3d(
+            torch.from_numpy(input).view(1, 1, *shape),
+            chunk_size,
+            stride=chunk_size,
+            ceil_mode=True,
+        )[0, 0]
+        output_shape = [math.ceil(shape[i] / chunk_size[i]) for i in range(3)]
+        output = np.zeros(output_shape)
+        chunk.simple_chunk(
+            [],
+            [f.get("input")],
+            chunk_size,
+            _chunk_max_pool,
+            num_workers,
+            pass_params=True,
+            output=output,
+        )
+
+        self.assertTrue(np.array_equal(gt.numpy(), output))
 
 
 if __name__ == "__main__":

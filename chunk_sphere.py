@@ -61,11 +61,14 @@ def _get_expand_edt(vol, anisotropy):
 
     assert np.all(np.isfinite(result))
 
-    return [result<0]
+    return [result < 0]
 
 
-def _get_dt(vol, anisotropy, black_border):
+def _get_dt(vol, anisotropy, black_border, filter_idx):
     # NOTE: might need to pad by one for chunks on borders of input volume
+
+    if filter_idx is not None:
+        vol = (vol != filter_idx).astype(vol.dtype)
 
     if not vol.flags["C_CONTIGUOUS"]:
         vol = np.ascontiguousarray(vol)
@@ -90,6 +93,7 @@ def get_dt(
     black_border,
     threshold,
     num_workers,
+    filter_idx=None,
 ):
     # computes euclidean distance transform (voxel-wise distance to nearest background)
     # vol: 3d volume (with 0 indicating back)
@@ -109,6 +113,7 @@ def get_dt(
         pad_width=pad_width,
         anisotropy=anisotropy,
         black_border=black_border,
+        filter_idx=filter_idx,
     )
 
 
