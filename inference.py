@@ -1,7 +1,7 @@
 import numpy as np
 import h5py
 from chunk_sphere import get_dt
-from utils import create_compressed
+from utils import create_compressed, extend_bbox
 from settings import *
 import os
 import chunk
@@ -27,10 +27,10 @@ def generate_batches(dataset, seeds, radius, num_points, anisotropy):
 
     batch = []
     for i in range(seeds.shape[0]):
-        idx = np.random.random_choice(np.where(is_valid[i]), size=num_points)
+        idx = np.random.choice(np.where(is_valid[i])[0], size=num_points)
         # [N, 4]
         batch.append(dataset[idx])
-    # [N, num_points]
+    # [batch, N, num_points]
     batch = np.stack(batch, axis=0)
 
     # [points]
@@ -44,23 +44,22 @@ def single_inference(
 ):
     pool = dataset.copy()
     while pool.shape[0]:
+        print(pool.shape[0])
         seed_idx = np.random.choice(pool.shape[0], size=min(pool.shape[0], batch_size))
         seeds = pool[seed_idx]  # [N, (idx, z,y,x)]
         # select points from the dataset and not the seed pool
         in_range, batch = generate_batches(
             dataset, seeds, radius, num_points, anisotropy
         )
-        # [N, 3], [N]
-        batch, idx = batch[:, 1:4], batch[:, 0]
+        # [batch, N, 3], [batch, N]
+        batch, idx = batch[..., 1:4], batch[..., 0]
         # [N, num_points]
         pred = predict(batch)
 
         for i in range(pred.shape[0]):
             # NOTE: if there are duplicate sampled points, the following will only run once per point
-            # prediction
-            tally[idx[i], 0] += pred[i, in_range]
-            # number of predictions
-            tally[idx[i], 1] += 1
+            # prediction, number of predictions
+            tally[idx[i]] += np.vstack((pred[i], np.ones(pred[i].shape[0]))).T
 
         # remove points in range from the seed pool
         # since all idx in pool are in dataset
@@ -136,6 +135,7 @@ def _chunk_nearest(vol, trunk_dt, spine_dt):
 
 def inference(
     base_path,
+    row,
     vol_dataset,
     raw_dataset,
     predict,
@@ -179,23 +179,19 @@ def inference(
     pred = ((tally[is_sampled, 0] / tally[is_sampled, 1]) > threshold) + 1
     points = raw_dataset[is_sampled]
 
-    # now do volume filling
-    # raw_dataset instead of points for deterministic dataset size
-    bbox = np.concatenate([np.min(raw_dataset, axis=0), np.max(raw_dataset, axis=0)])
-    # zmin, zmax, ymin, ymax, xmin, xmax
-    bbox = np.array([bbox[0], bbox[3], bbox[1], bbox[4], bbox[2], bbox[5]])
     # offset by bounding box
-    points = points - np.array([bbox[0], bbox[2], bbox[4]]).reshape(1, -1)
+    points = points - np.array([row[1], row[3], row[5]]).reshape(1, -1)
 
+    # now do volume filling
     output = h5py.File(os.path.join(base_path, "point_pred.h5"), "w")
-    shape = [bbox[1] - bbox[0] + 1, bbox[3] - bbox[2] + 1, bbox[5] - bbox[4] + 1]
-    assert np.array_equal(shape, vol_dataset.shape)
+    shape = vol_dataset.shape
     seeded = create_compressed(
         output,
         "seeded",
         shape=shape,
         dtype="uint16",
     )
+    # TODO: TODO: TODO: implement smarter in range points, use a dictionary like you did for uinion find remapping
     seeded = chunk.simple_chunk(
         [seeded],
         [seeded],
@@ -249,3 +245,33 @@ def inference(
     )
 
     return final
+
+
+def dumb_predict(points):
+    return np.random.rand(*points.shape[:2])
+    # takes numpy array [N, num_points, 3]
+
+
+if __name__ == "__main__":
+    h5 = h5py.File("dumb/1.h5", "r")
+    vol_dataset = h5.get("main")
+    row = h5.get("row")
+    points = np.load("dumb/1.npy")[:30000]
+    final = inference(
+        "dumb",
+        row,
+        vol_dataset,
+        points,
+        dumb_predict,
+        PC_ELIMINATION_RADIUS,
+        PC_DOWNSAMPLE_RADIUS,
+        PC_NUM_POINTS,
+        PC_BATCH_SIZE,
+        ANISOTROPY,
+        PC_NUM_ITER,
+        PC_THRESHOLD,
+        CHUNK_SIZE,
+        CONNECTIVITY,
+        NUM_WORKERS,
+    )
+    __import__("pdb").set_trace()
