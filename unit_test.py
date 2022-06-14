@@ -8,10 +8,16 @@ import torch
 import torch.nn.functional as F
 from utils import pad_vol
 import math
+from multiprocessing.pool import ThreadPool
 
 from imu.io import get_bb_all3d
 import opensimplex
 import edt
+import dask
+import dask_chunk
+import dask_chunk_sphere
+import dask.array as da
+from dask.diagnostics import ProgressBar
 from chunk_sphere import get_dt, get_boundary, _chunk_get_boundary, _get_dt
 from inference import _chunk_seed, _chunk_max_pool
 from point import chunk_func_spine
@@ -34,6 +40,9 @@ class ChunkTest(unittest.TestCase):
             os.remove("test.hdf5")
         except:
             pass
+        # dask.config.set(pool=ThreadPool(20))
+        # client = Client()
+        # print(client.cluster)
 
     def test_simple_chunk_output(self):
         shape = (100, 100, 100)
@@ -64,18 +73,58 @@ class ChunkTest(unittest.TestCase):
             print(f"pad method: {pad}")
             self.assertTrue(np.array_equal(output[:], gt))
 
+    def test_dask_chunk_output(self):
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+        pad_width = (1, 2, 3)
+
+        input1 = np.random.rand(*shape)
+        input2 = np.random.rand(*shape)
+        # cannot test function which depends on dtype (i.e., floats)
+        gt = input1 > input2
+
+        input_datasets = [da.from_array(x, chunks=chunk_size) for x in [input1, input2]]
+
+        def dumb(a, b, block_info=None):
+            return [a > b]
+
+        for pad in ["extend", "half_extend", False]:
+            output = dask_chunk.chunk(
+                dumb,
+                input_datasets,
+                output_dataset_dtypes=["b"],
+                pad=pad,
+                pad_width=pad_width,
+            )
+            print(f"pad method: {pad}")
+            # output.visualize(filename=f"{pad}.svg")
+            with ProgressBar():
+                self.assertTrue(np.array_equal(output.compute(), gt))
+
     def test_chunk_bbox(self):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
         num_workers = 2
 
-        input = np.random.randint(0, 10, shape)
+        input = np.random.randint(0, 100000, shape)
         gt = get_bb_all3d(input)
 
         f = h5py.File("test.hdf5", "w")
         f.create_dataset("input", data=input)
 
         output = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)
+        self.assertTrue(np.array_equal(output, gt))
+
+    def test_dask_chunk_bbox(self):
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+
+        input = np.random.randint(0, 100000, shape)
+        gt = get_bb_all3d(input)
+
+        output = dask_chunk.chunk_bbox(
+            da.from_array(input, chunks=chunk_size)
+        ).compute()
         self.assertTrue(np.array_equal(output, gt))
 
     def test_cc3d(self):
@@ -102,6 +151,37 @@ class ChunkTest(unittest.TestCase):
             num_workers,
             k,
         )
+        np.save("output_old.npy", [output[0][:], output[1]])
+
+        # largest_k instead of connected_components, because of ordering by voxel_count
+        gt = cc3d.largest_k(input, k=k, connectivity=connectivity)
+        statistics = cc3d.statistics(gt)["voxel_counts"]
+        statistics = np.concatenate([[statistics[0]], np.sort(statistics[1:])[::-1]])
+
+        # cannot evaluate whether cc3d is equal because ordering cannot be guaranteed
+        self.assertTrue(np.array_equal(output[1], statistics))
+        # check whether k filtering causes incorrect results
+        self.assertTrue(
+            np.array_equal(
+                output[1], cc3d.statistics(output[0][:].astype(np.uint))["voxel_counts"]
+            )
+        )
+
+    def test_dask_cc3d(self):
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+        connectivity = 26
+        k = 13
+
+        input = np.random.rand(*shape) > 0.8
+
+        output = dask_chunk.chunk_cc3d(
+            da.from_array(input, chunks=chunk_size),
+            connectivity,
+            k,
+        )
+        output = dask.compute(*output)
+        np.save("output_new.npy", output)
 
         # largest_k instead of connected_components, because of ordering by voxel_count
         gt = cc3d.largest_k(input, k=k, connectivity=connectivity)
@@ -189,6 +269,33 @@ class ChunkTest(unittest.TestCase):
         ).squeeze(0)
 
         self.assertTrue(np.array_equal(output[:], boundary))
+
+    def test_dask_get_boundary(self):
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+
+        input = np.random.rand(*shape) > 0.5
+
+        with ProgressBar():
+            output = dask_chunk_sphere.get_boundary(
+                da.from_array(input, chunks=chunk_size)
+            )
+            output = output.compute()
+
+        padded_vol = torch.from_numpy(pad_vol(input, [3, 3, 3]))
+        input = torch.from_numpy(input)
+        boundary = (
+            torch.logical_and(
+                F.max_pool3d(
+                    (~padded_vol).float().unsqueeze(0), kernel_size=3, stride=1
+                ),
+                input,
+            )
+            .squeeze(0)
+            .numpy()
+        )
+
+        self.assertTrue(np.array_equal(output, boundary))
 
     def test_argwhere_seg(self):
         # test both argwhere_seg and simple_chunk's bbox
