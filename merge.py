@@ -1,11 +1,10 @@
 import numpy as np
 import h5py
 import numpy as np
-from tqdm import tqdm
 from glob import glob
 from pathlib import Path
 from settings import *
-from utils import create_compressed, dask_read_array, dask_write_array
+from utils import dask_read_array, dask_write_array
 import dask
 import dask.array as da
 import dask_chunk
@@ -14,7 +13,8 @@ import os
 import sys
 import json
 
-import chunk
+from dask.diagnostics import ProgressBar
+
 
 
 def main(base_path, inputs, idx):
@@ -78,4 +78,5 @@ if __name__ == "__main__":
     if len(filter):
         inputs = [inputs[i] for i in range(len(idx)) if idx[i] in filter]
         idx = [idx[i] for i in range(len(idx)) if idx[i] in filter]
-    main(sys.argv[1], inputs, idx)
+    with ProgressBar():
+        main(sys.argv[1], inputs, idx)

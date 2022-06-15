@@ -64,4 +64,4 @@ def dask_write_array(filename, dataset_name, x):
 
     # propagating chunk sizes
     da.to_hdf5(filename, dict(zip(dataset_name, x)), compression="gzip")
-    return h5py.File(filename, "w")
+    return h5py.File(filename, "a")

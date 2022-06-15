@@ -14,6 +14,8 @@ import chunk
 from utils import pad_vol, create_compressed
 from settings import *
 
+from dask.diagnostics import ProgressBar
+
 # NOTE: here naive separation between segments is used: each segment id is processed separately
 # can potentially come up with a way to do it in a chunk-based manner instead of by segments
 # will need to deal with chunk boundaries then
@@ -294,4 +296,5 @@ def main(base_path, id):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], int(sys.argv[2]))
+    with ProgressBar():
+        main(sys.argv[1], int(sys.argv[2]))

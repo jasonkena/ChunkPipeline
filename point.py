@@ -10,6 +10,7 @@ import os
 import sys
 from settings import *
 from utils import extend_bbox, dask_read_array
+from dask.diagnostics import ProgressBar
 
 
 def main(base_path, id):
@@ -39,4 +40,5 @@ def main(base_path, id):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], int(sys.argv[2]))
+    with ProgressBar():
+        main(sys.argv[1], int(sys.argv[2]))
