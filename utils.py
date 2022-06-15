@@ -1,5 +1,7 @@
 import numpy as np
-import torch
+import dask
+import dask.array as da
+import h5py
 from settings import *
 
 
@@ -45,3 +47,21 @@ def create_compressed(dataset, name, shape, *args, **kwargs):
     return dataset.create_dataset(
         *args, **kwargs, compression="gzip", chunks=chunk_size
     )
+
+
+def dask_read_array(dataset):
+    return da.from_array(dataset, chunks=CHUNK_SIZE)
+
+
+def dask_write_array(filename, dataset_name, x):
+    assert len(x.shape) >= 3
+    # if list
+    if not isinstance(dataset_name, list):
+        dataset_name = [dataset_name]
+    if not isinstance(x, list):
+        x = [x]
+    dataset_name = [f"/{i}" for i in dataset_name]
+
+    # propagating chunk sizes
+    da.to_hdf5(filename, dict(zip(dataset_name, x)), compression="gzip")
+    return h5py.File(filename, "w")

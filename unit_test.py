@@ -118,6 +118,17 @@ class ChunkTest(unittest.TestCase):
     def test_dask_chunk_bbox(self):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
+        num_workers = 2
+
+        input = np.random.randint(0, 100000, shape)
+        gt = get_bb_all3d(input)
+
+        output = chunk.chunk_bbox(da.from_array(input, chunks=chunk_size)).compute()
+        self.assertTrue(np.array_equal(output, gt))
+
+    def test_dask_chunk_bbox(self):
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
 
         input = np.random.randint(0, 100000, shape)
         gt = get_bb_all3d(input)
@@ -474,6 +485,39 @@ class ChunkTest(unittest.TestCase):
         )
 
         self.assertTrue(np.array_equal(input, f.get("reverse_output")[:]))
+
+    def test_dask_get_seg(self):
+        # test both argwhere_seg and simple_chunk's bbox
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+
+        input = np.zeros(shape, dtype=int)
+        input[40:60, 40:60, 40:60] = np.random.randint(0, 10, (20, 20, 20))
+
+        input_da = da.from_array(input, chunks=chunk_size)
+
+        # get first row
+        bbox = dask_chunk.chunk_bbox(input_da).compute()[0]
+        assert bbox[0] == 1
+
+        seg = dask_chunk.get_seg(input_da, bbox, filter_id=True).compute()
+
+        gt = (
+            input[bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1]
+            == bbox[0]
+        )
+
+        self.assertTrue(np.array_equal(seg, gt))
+
+        # test merge_seg
+        output = dask_chunk.merge_seg(
+            da.zeros(shape, chunks=chunk_size, dtype=np.uint),
+            input[bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1],
+            bbox,
+            lambda a, b: a + b,
+        ).compute()
+
+        self.assertTrue(np.array_equal(input, output))
 
     def test_chunk_seed(self):
         dim = 5

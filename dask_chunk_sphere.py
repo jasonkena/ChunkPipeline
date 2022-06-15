@@ -13,7 +13,7 @@ import numpy as np
 import dask.array as da
 import dask
 import dask_chunk
-from utils import pad_vol, create_compressed
+from utils import dask_read_array, dask_write_array
 from settings import *
 
 # NOTE: here naive separation between segments is used: each segment id is processed separately
@@ -194,38 +194,29 @@ def extract(
     return seg, voxel_counts
 
 
+@dask.delayed
+def generate_seg_bbox(bboxes, voxel_counts):
+    return np.concatenate((bboxes, voxel_counts[1:].reshape(-1, 1)), axis=1)
+
+
 def main(base_path, id):
     if os.path.exists(os.path.join(base_path, "baseline", f"{str(id)}.h5")):
         return
 
-    input = h5py.File(os.path.join(base_path, f"{str(id)}.h5"))
-    output = h5py.File(os.path.join(base_path, f"seg_{str(id)}.h5"), "w")
-    # no need to create actual group
-    group_cache = output
+    input = h5py.File(os.path.join(base_path, f"{str(id)}.h5")).get("main")
+    input = dask_read_array(input)
+    output = os.path.join(base_path, f"seg_{str(id)}.h5")
 
-    extract(
-        group_cache,
-        input.get("main"),
-        CHUNK_SIZE,
-        ANISOTROPY,
-        CONNECTIVITY,
-        MAX_ERODE,
-        ERODE_DELTA,
-        NUM_ITER,
-        NUM_WORKERS,
+    seg, voxel_counts = extract(
+        input, ANISOTROPY, CONNECTIVITY, MAX_ERODE, ERODE_DELTA, NUM_ITER
     )
 
-    voxel_counts = group_cache.get("voxel_counts")[:]
-    for key in group_cache.keys():
-        if key != "seg":
-            del group_cache[key]
-
-    bboxes = chunk.chunk_bbox(output.get("seg"), CHUNK_SIZE, NUM_WORKERS)[:]
+    bboxes = dask_chunk.chunk_bbox(seg)
     # cat voxel_counts to end of bboxes, removing background voxel countvc
-    seg_bbox = np.concatenate((bboxes, voxel_counts[1:].reshape(-1, 1)), axis=1)
+    seg_bbox = generate_seg_bbox(bboxes, voxel_counts)
+    seg_bbox = dask.from_delayed(seg_bbox, shape=(np.nan, 8), dtype=int)
 
-    group_cache.create_dataset("seg_bbox", data=seg_bbox)
-    output.close()
+    dask_write_array(output, ["seg", "seg_bbox"], [seg, seg_bbox])
 
 
 if __name__ == "__main__":

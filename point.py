@@ -1,56 +1,41 @@
 import numpy as np
 import chunk
 import chunk_sphere
+import dask
+import dask.array as da
+import dask_chunk
+import dask_chunk_sphere
 import h5py
 import os
 import sys
 from settings import *
-from utils import extend_bbox, create_compressed
-
-
-def chunk_func_spine(params, all, spine):
-    shrink_slices = params["shrink_slices"]
-    assert shrink_slices is not None
-    boundary = chunk_sphere._chunk_get_boundary(all)[0]
-    return boundary[shrink_slices], spine[shrink_slices]
+from utils import extend_bbox, dask_read_array
 
 
 def main(base_path, id):
     # id is in range(50)
-    all = h5py.File(os.path.join(base_path, f"{str(id)}.h5"))
-    spine = h5py.File(os.path.join(base_path, "spine.h5"))
-    cache = h5py.File(os.path.join(base_path, "cache.h5"), "w")
+    all = h5py.File(os.path.join(base_path, f"{str(id)}.h5")).get("main")
+    all = dask_read_array(all)
+    spine = h5py.File(os.path.join(base_path, "spine.h5")).get("main")
+    spine = dask_read_array(spine)
 
     bboxes = np.load(os.path.join(base_path, "bbox.npy")).astype(int)
-    row = extend_bbox(bboxes[id - 1], spine.get("main").shape)
+    row = extend_bbox(bboxes[id - 1], spine.shape)
 
     output_file = os.path.join(base_path, f"{row[0]}.npy")
     if os.path.exists(output_file):
         return
 
-    new_spine = create_compressed(
-        cache,
-        "new_spine",
-        shape=(row[2] - row[1] + 1, row[4] - row[3] + 1, row[6] - row[5] + 1),
-        dtype="uint16",
+    new_spine = dask_chunk.get_seg(spine, row, filter_id=True)
+
+    boundary = dask_chunk_sphere.get_boundary(all)
+    idx = da.nonzero(boundary)
+    extra = new_spine[idx[0], idx[1], idx[2]]
+    output = da.stack(
+        [idx[0] + row[1], idx[1] + row[3], idx[2] + row[5], extra], axis=1
     )
 
-    new_spine = chunk.get_seg(
-        new_spine, spine.get("main"), row, CHUNK_SIZE, True, NUM_WORKERS
-    )
-
-    # NOTE: NOTE: NOTE: rewrite this to use get_seg
-    output = chunk.chunk_argwhere(
-        [all.get("main"), new_spine],
-        CHUNK_SIZE,
-        lambda params, all, spine: chunk_func_spine(params, all, spine),
-        "extend",
-        NUM_WORKERS,
-    )
-    output[:, :3] += np.array([row[1], row[3], row[5]])
-    assert (0 <= np.min(output)) and (np.max(output) <= np.iinfo(np.uint16).max)
-    output = output.astype(np.uint16)
-    np.save(output_file, output)
+    np.save(output_file, output.compute())
 
 
 if __name__ == "__main__":

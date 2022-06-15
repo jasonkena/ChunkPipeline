@@ -431,10 +431,7 @@ def get_seg(vol, bbox, filter_id):
     return vol[bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1]
 
 
-#
-# def _chunk_reverse_write_seg(params, vol, output, bbox_in, merge_func):
-#     pass
-#
-#
-# def merge_seg(output, vol, bbox, chunk_size, merge_func, num_workers):
-#     pass
+def merge_seg(output, vol, bbox, merge_func):
+    slices = tuple(slice(bbox[2 * i + 1], bbox[2 * i + 2] + 1) for i in range(3))
+    output[slices] = merge_func(output[slices], vol)
+    return output
