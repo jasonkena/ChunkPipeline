@@ -412,14 +412,32 @@ def chunk_cc3d(vol, connectivity, k):
     return partial_cc3d, voxel_counts
 
 
-#
-# def _chunk_argwhere(params, *args, **kwargs):
-#     __import__("pdb").set_trace()
-#
-#
-# def chunk_argwhere(dataset_inputs, chunk_size, chunk_func, pad, num_workers):
-#     pass
-#
+def _chunk_nonzero(vol, block_info):
+    # kwargs must contain func, and it must return 2 things: binary mask and another (array or None)
+    # returns indices where vol is true
+    # [3, N]
+    idx = np.stack(np.argwhere(vol), axis=0)
+    idx = idx + np.array(
+        [block_info[0]["array-location"][i][0] for i in range(3)]
+    ).reshape(-1, 3)
+
+    return [idx]
+
+
+@dask.delayed
+def _aggregate_nonzero(idx):
+    idx = np.concatenate(idx.flatten(), axis=0)
+    # for ordering purposes
+    return np.unique(idx, axis=0)
+
+
+def chunk_nonzero(vol):
+    # TODO: implement chunked saving instead of aggregating all indices
+    result = chunk(_chunk_nonzero, [vol], [object])
+    result = _aggregate_nonzero(result)
+    result = da.from_delayed(result, shape=[np.nan, 3], dtype=int)
+    return result
+
 
 # skipping chunk_unique
 
