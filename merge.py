@@ -44,6 +44,8 @@ def main(base_path, inputs, idx):
         temp = np.concatenate(
             [[0, idx[i]], np.arange(cumsum_spines[i], cumsum_spines[i] + num_spines[i])]
         )
+        # take into account background
+        assert len(temp) == len(seg_bboxes[i]) + 1
         remapping[idx[i]] = temp
         seg_bboxes[i][:, 0] = temp[seg_bboxes[i][:, 0]]
     str_remapping = json.dumps({i: remapping[i].tolist() for i in remapping})
