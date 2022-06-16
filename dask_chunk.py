@@ -6,6 +6,8 @@ import itertools
 from imu.io import get_bb_all3d
 import cc3d
 from unionfind import UnionFind
+import string
+import itertools
 
 import math
 
@@ -50,6 +52,7 @@ def chunk(
     pad=False,
     pad_width=(1, 1, 1),
     trim_output=True,
+    align_idx=None,
     **kwargs
 ):
     # func
@@ -63,6 +66,7 @@ def chunk(
     # output_dataset_dtypes, dtype for each output dataset, object for statistics
     # pad: "extend", "half_extend" or False value, output will be trimmed
     # trim_output: whether to undo pad for non-object dtypes, only relevant when pad is True
+    # align_arrays: idx for input_datasets that should be aligned
 
     # NOTE: assumes input sizes are all equal and that output size = input size
     # NOTE: if output_dataset_dtypes is not empty, func must return same shape as input vol
@@ -75,6 +79,20 @@ def chunk(
     # because trimming does not work reliably for half_extend
     if pad == "half_extend" and not trim_output:
         assert all([i == object for i in output_dataset_dtypes])
+
+    # unify chunks of the different arrays
+    if align_idx:
+        input_datasets = input_datasets.copy()
+        aligned_arrays = [input_datasets[i] for i in align_idx]
+        assert len(set([i.shape for i in aligned_arrays])) == 1
+        axes = string.ascii_lowercase[: len(aligned_arrays[0].shape)]
+        sequence = [(i, axes) for i in aligned_arrays]
+        # flatten sequence
+        sequence = itertools.chain.from_iterable(sequence)
+        _, aligned_arrays = da.core.unify_chunks(*sequence)
+        for i in align_idx:
+            input_datasets[i] = aligned_arrays[i]
+
     shape = input_datasets[0].shape
     old_chunks = input_datasets[0].chunks
 
@@ -253,7 +271,7 @@ def chunk_remap(vol, remapping):
     return chunk(
         lambda vol, remapping, block_info: [remapping.item()[vol]],
         [vol, remapping],
-        [remapping.dtype],
+        [vol.dtype],
     )
 
 
@@ -408,18 +426,23 @@ def chunk_cc3d(vol, connectivity, k):
     remapping = da.rechunk(remapping, chunks=(1, 1, 1))
 
     partial_cc3d = chunk_remap(partial_cc3d, remapping)
+    voxel_counts = da.from_delayed(voxel_counts, shape=[np.nan], dtype=int)
 
     return partial_cc3d, voxel_counts
 
 
-def _chunk_nonzero(vol, block_info):
+def _chunk_nonzero(vol, extra=None, block_info=None):
     # kwargs must contain func, and it must return 2 things: binary mask and another (array or None)
     # returns indices where vol is true
     # [3, N]
-    idx = np.stack(np.argwhere(vol), axis=0)
+    idx = np.stack(np.nonzero(vol), axis=1)
+    if extra is not None:
+        extra = extra[vol.astype(bool)]
     idx = idx + np.array(
         [block_info[0]["array-location"][i][0] for i in range(3)]
     ).reshape(-1, 3)
+    if extra is not None:
+        idx = np.concatenate([idx, extra.reshape(-1, 1)], axis=1)
 
     return [idx]
 
@@ -431,11 +454,17 @@ def _aggregate_nonzero(idx):
     return np.unique(idx, axis=0)
 
 
-def chunk_nonzero(vol):
+def chunk_nonzero(vol, extra=None):
     # TODO: implement chunked saving instead of aggregating all indices
-    result = chunk(_chunk_nonzero, [vol], [object])
+    inputs = [vol, extra] if extra is not None else [vol]
+    result = chunk(
+        _chunk_nonzero,
+        inputs,
+        [object],
+        align_idx=([0, 1] if extra is not None else None),
+    )
     result = _aggregate_nonzero(result)
-    result = da.from_delayed(result, shape=[np.nan, 3], dtype=int)
+    result = da.from_delayed(result, shape=[np.nan, 3 + (extra is not None)], dtype=int)
     return result
 
 

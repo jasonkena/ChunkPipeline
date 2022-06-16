@@ -16,6 +16,8 @@ import dask_chunk
 from utils import dask_read_array, dask_write_array
 from settings import *
 
+from dask.diagnostics import ProgressBar
+
 # NOTE: here naive separation between segments is used: each segment id is processed separately
 # can potentially come up with a way to do it in a chunk-based manner instead of by segments
 # will need to deal with chunk boundaries then
@@ -123,7 +125,7 @@ def get_expand_edt(
     pad_width = [math.ceil(threshold / i) for i in anisotropy]
 
     return dask_chunk.chunk(
-        _get_dt,
+        _get_expand_edt,
         [vol],
         [bool],
         pad="extend",
@@ -161,6 +163,7 @@ def extract(
     erode_delta,
     num_iter,
 ):
+    print("entering")
     # gets volume segmentation
     # vol: binary 3d volume
     # max_erode: int/float, thresholding distance to cut off spines
@@ -214,10 +217,13 @@ def main(base_path, id):
     bboxes = dask_chunk.chunk_bbox(seg)
     # cat voxel_counts to end of bboxes, removing background voxel countvc
     seg_bbox = generate_seg_bbox(bboxes, voxel_counts)
-    seg_bbox = dask.from_delayed(seg_bbox, shape=(np.nan, 8), dtype=int)
+    seg_bbox = da.from_delayed(seg_bbox, shape=(np.nan, 8), dtype=int)
 
-    dask_write_array(output, ["seg", "seg_bbox"], [seg, seg_bbox])
+    file = dask_write_array(output, "seg", seg)
+    file.create_dataset("seg_bbox", data=seg_bbox.compute())
+    file.close()
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], int(sys.argv[2]))
+    with ProgressBar():
+        main(sys.argv[1], int(sys.argv[2]))

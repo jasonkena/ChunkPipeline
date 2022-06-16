@@ -16,7 +16,6 @@ import json
 from dask.diagnostics import ProgressBar
 
 
-
 def main(base_path, inputs, idx):
     for i in idx:
         assert i <= NUM_DENDRITES
@@ -57,16 +56,19 @@ def main(base_path, inputs, idx):
     final_output.close()
 
     final = da.zeros(
-        shape=h5py.File(os.path.join(base_path, "raw.h5")).get("main").shape, dtype=int
+        shape=h5py.File(os.path.join(base_path, "raw.h5")).get("main").shape,
+        dtype=int,
+        chunks=CHUNK_SIZE,
     )
 
     for i in range(len(inputs)):
         input = dask_read_array(files[i].get("seg"))
-        shape = input.shape
         # NOTE: since Dask doesn't allow multidimensional indexing
-        remapped = da.from_array(remapping[idx[i]])[input.flatten()].reshape(shape)
         dask_chunk.merge_seg(
-            final, remapped, bboxes[i], lambda output, input: output + input
+            final,
+            input,
+            bboxes[i],
+            lambda output, input: output + remapping[idx[i]][input],
         )
 
     dask_write_array(output, "main", final)

@@ -97,7 +97,6 @@ class ChunkTest(unittest.TestCase):
             k,
         )
         output = dask.compute(*output)
-        np.save("output_new.npy", output)
 
         # largest_k instead of connected_components, because of ordering by voxel_count
         gt = cc3d.largest_k(input, k=k, connectivity=connectivity)
@@ -109,7 +108,7 @@ class ChunkTest(unittest.TestCase):
         # check whether k filtering causes incorrect results
         self.assertTrue(
             np.array_equal(
-                output[1], cc3d.statistics(output[0][:].astype(np.uint))["voxel_counts"]
+                output[1], cc3d.statistics(output[0].astype(np.uint))["voxel_counts"]
             )
         )
 
@@ -262,6 +261,14 @@ class ChunkTest(unittest.TestCase):
 
         output = dask_chunk.chunk_nonzero(da.from_array(input, chunks=chunk_size))
         self.assertTrue(np.array_equal(gt, output.compute()))
+
+        extra = np.random.randint(0, 100, shape)
+        gt_extra = np.concatenate([gt, extra[input].reshape(-1, 1)], axis=1)
+        output_extra = dask_chunk.chunk_nonzero(
+            da.from_array(input, chunks=chunk_size),
+            extra=da.from_array(extra, chunks=chunk_size),
+        )
+        self.assertTrue(np.array_equal(gt_extra, output_extra.compute()))
 
     def test_dask_get_seg(self):
         # test both argwhere_seg and simple_chunk's bbox

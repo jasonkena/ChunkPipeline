@@ -30,11 +30,8 @@ def main(base_path, id):
     new_spine = dask_chunk.get_seg(spine, row, filter_id=True)
 
     boundary = dask_chunk_sphere.get_boundary(all)
-    idx = dask_chunk.chunk_nonzero(boundary)
-    extra = new_spine[idx[0], idx[1], idx[2]]
-    output = da.stack(
-        [idx[0] + row[1], idx[1] + row[3], idx[2] + row[5], extra], axis=1
-    )
+    output = dask_chunk.chunk_nonzero(boundary, extra=new_spine)
+    output = output + np.array([row[1], row[3], row[5], 0]).reshape(1, -1)
 
     np.save(output_file, output.compute())
 

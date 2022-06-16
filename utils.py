@@ -54,7 +54,6 @@ def dask_read_array(dataset):
 
 
 def dask_write_array(filename, dataset_name, x):
-    assert len(x.shape) >= 3
     # if list
     if not isinstance(dataset_name, list):
         dataset_name = [dataset_name]
