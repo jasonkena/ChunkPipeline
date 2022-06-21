@@ -1,12 +1,15 @@
 import numpy as np
 import h5py
-from chunk_sphere import get_dt
 from utils import create_compressed, extend_bbox
 from settings import *
 import os
-import chunk
-import chunk_sphere
 import math
+
+import dask_chunk
+import dask_chunk_sphere
+
+import dask
+import dask.array as da
 
 
 def generate_batches(dataset, seeds, radius, num_points, anisotropy):
@@ -69,72 +72,34 @@ def single_inference(
     return tally
 
 
-def _chunk_seed(params, vol, points, pred):
-    chunk_size = params["chunk_size"]
-    z_min, y_min, x_min = [
-        params[i] * chunk_size[idx] for idx, i in enumerate(["z", "y", "x"])
-    ]
-    z_max, y_max, x_max = (
-        z_min + chunk_size[0],
-        y_min + chunk_size[1],
-        x_min + chunk_size[2],
-    )
-    lower_bound = np.array([z_min, y_min, x_min]).reshape(1, -1)
-    upper_bound = np.array([z_max, y_max, x_max]).reshape(1, -1)
-
-    # [N, 3]
-    in_range = np.logical_and(
-        points >= lower_bound,
-        points < upper_bound,
-    )
-    # [N]
-    in_range = np.all(in_range, axis=1)
-    valid_points = points[in_range] - lower_bound
-    valid_pred = pred[in_range]
-
-    result = np.zeros_like(vol)
-    result[valid_points[:, 0], valid_points[:, 1], valid_points[:, 2]] = valid_pred
-
-    return [result]
+def _chunk_max_pool(vol, block_info):
+    return [np.max(vol)]
 
 
-def _chunk_max_pool(params, vol, output):
-    z, y, x = [params[i] for i in ["z", "y", "x"]]
-    output[z, y, x] = np.max(vol)
-    return []
-
-
-def max_dt(vol, chunk_width, anisotropy, num_workers):
-    # chunk_width is in nanometers
-    chunk_size = [math.ceil(chunk_width / anisotropy[i]) for i in range(3)]
-    output_shape = [math.ceil(vol.shape[i] / chunk_size[i]) for i in range(3)]
-    output = np.zeros(output_shape)
-
-    chunk.simple_chunk(
-        [],
-        [vol],
-        chunk_size,
-        _chunk_max_pool,
-        num_workers,
-        pass_params=True,
-        output=output,
-    )
-
-    # an approximation of chunk_width
-    real_anisotropy = [chunk_size[i] * anisotropy[i] for i in range(3)]
-    dt = chunk_sphere._get_dt(
-        output, real_anisotropy, black_border=False, filter_idx=None
+@dask.delayed
+def _aggregate_dt(vol, real_anisotropy):
+    dt = dask_chunk_sphere._get_dt(
+        vol.astype(np.uint), real_anisotropy, black_border=False, block_info=None
     )
     return np.max(dt)
 
 
-def _chunk_nearest(vol, trunk_dt, spine_dt):
-    # background 0, trunk 1, spine 2
-    return [((spine_dt > trunk_dt) + 1) * vol]
+def max_dt(vol, chunk_width, anisotropy):
+    # NOTE: NOTE: NOTE: implement this
+    # chunk_width is in nanometers
+    chunk_size = [math.ceil(chunk_width / anisotropy[i]) for i in range(3)]
+    vol = da.rechunk(vol, chunks=tuple(chunk_size))
+
+    downsampled = dask_chunk.chunk(_chunk_max_pool, [vol], [object])
+
+    # an approximation of chunk_width
+    real_anisotropy = [chunk_size[i] * anisotropy[i] for i in range(3)]
+    max_dt_val = _aggregate_dt(downsampled, real_anisotropy)
+
+    return max_dt_val
 
 
 def inference(
-    base_path,
     row,
     vol_dataset,
     raw_dataset,
@@ -183,82 +148,97 @@ def inference(
     points = points - np.array([row[1], row[3], row[5]]).reshape(1, -1)
 
     # now do volume filling
-    output = h5py.File(os.path.join(base_path, "point_pred.h5"), "w")
     shape = vol_dataset.shape
-    seeded = create_compressed(
-        output,
-        "seeded",
-        shape=shape,
-        dtype="uint16",
-    )
-    # TODO: TODO: TODO: implement smarter in range points, use a dictionary like you did for uinion find remapping
-    seeded = chunk.simple_chunk(
-        [seeded],
-        [seeded],
-        chunk_size,
-        _chunk_seed,
-        num_workers,
-        pass_params=True,
-        points=points,
-        pred=pred,
-    )
+    seeded = chunk_seed(shape, points, pred, chunk_size)
 
-    threshold = max_dt(vol_dataset, downsample_radius, anisotropy, num_workers)
-    trunk_dt = get_dt(
-        # NOTE: NOTE: NOTE: should not be uint16
-        create_compressed(output, "trunk_dt", shape=shape, dtype="f"),
+    threshold = max_dt(vol_dataset, downsample_radius, anisotropy).compute()
+    trunk_dt = dask_chunk_sphere.get_dt(
         seeded,
-        chunk_size,
         anisotropy,
         False,
         threshold,
-        num_workers,
         filter_idx=1,
     )
-    spine_dt = get_dt(
-        create_compressed(output, "spine_dt", shape=shape, dtype="f"),
+    spine_dt = dask_chunk_sphere.get_dt(
         seeded,
-        chunk_size,
         anisotropy,
         False,
         threshold,
-        num_workers,
         filter_idx=2,
     )
+    # background 0, trunk 1, spine 2
+    nearest_labels = ((spine_dt > trunk_dt) + 1) * vol_dataset
 
-    nearest_labels = chunk.simple_chunk(
-        [create_compressed(output, "nearest_labels", shape=shape, dtype="uint16")],
-        [vol_dataset, trunk_dt, spine_dt],
-        chunk_size,
-        _chunk_nearest,
-        num_workers,
-    )
-
-    final, voxel_counts = chunk.chunk_cc3d(
-        create_compressed(output, "main", shape=shape, dtype="uint16"),
+    final, voxel_counts = dask_chunk.chunk_cc3d(
         nearest_labels,
-        output,
-        chunk_size,
         connectivity,
         num_workers,
-        k=False,
     )
 
-    return final
+    return final, voxel_counts
 
 
 def dumb_predict(points):
+    ALL_BATCHES.create_dataset(str(len(ALL_BATCHES.keys())), data=points)
     return np.random.rand(*points.shape[:2])
     # takes numpy array [N, num_points, 3]
 
 
+def _chunk_seed(vol, merged, block_info):
+    merged = merged.item()
+    if merged is not None:
+        vol = np.zeros_like(vol)
+        merged = merged - np.array(
+            [block_info[0]["array-location"][i][0] for i in range(3)] + [0]
+        ).reshape(1, -1)
+        vol[merged[:, 0], merged[:, 1], merged[:, 2]] = merged[:, 3]
+    return [vol]
+
+
+def chunk_seed(vol_shape, points, pred, chunk_size):
+    chunk_idx = np.floor(
+        points.astype(float) / np.array(chunk_size).reshape(1, -1)
+    ).astype(int)
+    # group points by chunk_idx
+    inverse = np.unique(chunk_idx, return_inverse=True, axis=0)[1]
+    argsort = np.argsort(inverse)
+
+    chunk_idx = chunk_idx[argsort]
+    merged = np.concatenate([points, pred.reshape(-1, 1)], axis=1)[argsort]
+
+    # https://stackoverflow.com/questions/38013778/is-there-any-numpy-group-by-function
+    unique_idx, split_points = np.unique(chunk_idx, return_index=True, axis=0)
+    # remove 0
+    split_points = split_points[1:]
+    splitted = np.split(merged, split_points, axis=0)
+    chunked = np.empty(
+        [math.ceil(vol_shape[i] / chunk_size[i]) for i in range(3)], dtype=object
+    )
+
+    for i, x in enumerate(unique_idx):
+        chunked[x[0], x[1], x[2]] = splitted[i]
+
+    result = dask_chunk.chunk(
+        _chunk_seed,
+        [
+            da.zeros(vol_shape, chunks=chunk_size, dtype=int),
+            da.from_array(chunked, chunks=(1, 1, 1)),
+        ],
+        [int],
+    )
+
+    return result
+
+
 if __name__ == "__main__":
+    ALL_BATCHES = h5py.File("dumb/batches.h5", "w")
     h5 = h5py.File("dumb/1.h5", "r")
     vol_dataset = h5.get("main")
+    vol_dataset = da.from_array(vol_dataset, chunks=CHUNK_SIZE)
     row = h5.get("row")
+    # points = np.load("dumb/1.npy")
     points = np.load("dumb/1.npy")[:30000]
     final = inference(
-        "dumb",
         row,
         vol_dataset,
         points,
@@ -274,4 +254,3 @@ if __name__ == "__main__":
         CONNECTIVITY,
         NUM_WORKERS,
     )
-    __import__("pdb").set_trace()
