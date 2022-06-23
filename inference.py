@@ -113,7 +113,8 @@ def _chunk_seed(vol, merged, block_info):
         merged = merged - np.array(
             [block_info[0]["array-location"][i][0] for i in range(3)] + [0]
         ).reshape(1, -1)
-        vol[merged[:, 0], merged[:, 1], merged[:, 2]] = merged[:, 3]
+        idx = merged[:, :3].astype(int)
+        vol[idx[:, 0], idx[:, 1], idx[:, 2]] = merged[:, 3]
     return [vol]
 
 

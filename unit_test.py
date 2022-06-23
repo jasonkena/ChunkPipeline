@@ -1,7 +1,5 @@
 import unittest
 import numpy as np
-import h5py
-import chunk
 import cc3d
 import os
 import torch
@@ -14,12 +12,12 @@ from imu.io import get_bb_all3d
 import opensimplex
 import edt
 import dask
-import dask_chunk
-import dask_chunk_sphere
 import dask.array as da
 from dask.diagnostics import ProgressBar
-from chunk_sphere import get_dt, get_boundary, _chunk_get_boundary, _get_dt
-from inference import _chunk_seed, _chunk_max_pool
+
+import dask_chunk
+import dask_chunk_sphere
+import inference
 
 
 def generate_simplex_noise(shape, feature_scale):
@@ -118,14 +116,13 @@ class ChunkTest(unittest.TestCase):
         input = np.ones((pad * 2 + 1, pad * 2 + 1, pad * 2 + 1))
         input[pad, pad, pad] = 0
 
-        output = _get_dt(input, anisotropy, False)[0]
+        output = dask_chunk_sphere._get_dt(input, anisotropy, False, None)[0]
 
         assert output[0, pad, pad] == anisotropy[0] * pad
         assert output[pad, 0, pad] == anisotropy[1] * pad
         assert output[pad, pad, 0] == anisotropy[2] * pad
 
     def test_dt(self):
-        num_workers = 2
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
         anisotropy = (1, 2, 3)
@@ -134,22 +131,15 @@ class ChunkTest(unittest.TestCase):
         input = generate_simplex_noise(shape, 0.1)  # > 0 #np.random.rand(*shape) > 0.5
         input = input > input.mean()
 
-        f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input", data=input)
-        f.create_dataset("output", shape, dtype="f")
-
-        output = get_dt(
-            f.get("output"),
-            f.get("input"),
-            chunk_size,
+        output = dask_chunk_sphere.get_dt(
+            da.from_array(input, chunks=chunk_size),
             anisotropy,
             False,
             threshold,
-            num_workers,
-        )
+        ).compute()
         output_idx = output[:] <= threshold
 
-        gt = _get_dt(f.get("input")[:], anisotropy, False)[0]
+        gt = dask_chunk_sphere._get_dt(input, anisotropy, False, None)[0]
         gt_idx = gt <= threshold
 
         num_errors = np.logical_xor(output_idx, gt_idx)
@@ -157,33 +147,6 @@ class ChunkTest(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output[:][output_idx], gt[gt_idx]))
         self.assertTrue(np.array_equal(output_idx, gt_idx))
-
-    def test_get_boundary(self):
-        shape = (100, 100, 100)
-        chunk_size = (9, 8, 7)
-        num_workers = 2
-
-        input = np.random.rand(*shape) > 0.5
-
-        f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input", data=input)
-        f.create_dataset("output", shape, dtype="i")
-
-        output = get_boundary(
-            f.get("output"),
-            f.get("input"),
-            chunk_size,
-            num_workers,
-        )
-
-        padded_vol = torch.from_numpy(pad_vol(input, [3, 3, 3]))
-        input = torch.from_numpy(input)
-        boundary = torch.logical_and(
-            F.max_pool3d((~padded_vol).float().unsqueeze(0), kernel_size=3, stride=1),
-            input,
-        ).squeeze(0)
-
-        self.assertTrue(np.array_equal(output[:], boundary))
 
     def test_dask_get_boundary(self):
         shape = (100, 100, 100)
@@ -211,46 +174,6 @@ class ChunkTest(unittest.TestCase):
         )
 
         self.assertTrue(np.array_equal(output, boundary))
-
-    def test_argwhere_seg(self):
-        # test both argwhere_seg and simple_chunk's bbox
-        shape = (100, 100, 100)
-        chunk_size = (9, 8, 7)
-        num_workers = 2
-
-        input = np.zeros(shape, dtype=int)
-        input[40:60, 40:60, 40:60] = np.random.randint(0, 10, (20, 20, 20))
-
-        f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input", data=input)
-
-        # get first row
-        bbox = chunk.chunk_bbox(f.get("input"), chunk_size, num_workers)[0]
-        assert bbox[0] == 1
-
-        f.create_dataset(
-            "seg",
-            shape=(bbox[2] - bbox[1] + 1, bbox[4] - bbox[3] + 1, bbox[6] - bbox[5] + 1),
-            dtype="u1",
-        )
-        seg = chunk.get_seg(
-            f.get("seg"), f.get("input"), bbox, chunk_size, True, num_workers
-        )
-
-        output = chunk.chunk_argwhere(
-            [seg],
-            chunk_size,
-            lambda params, vol: [vol, None],
-            False,
-            num_workers,
-        )
-        output += np.array([bbox[1], bbox[3], bbox[5]])
-        output = output[np.lexsort(output.T)]
-
-        idx = np.argwhere(input == bbox[0])
-        idx = idx[np.lexsort(idx.T)]
-
-        self.assertTrue(np.array_equal(output[:], idx))
 
     def test_dask_chunk_nonzero(self):
         shape = (100, 100, 100)
@@ -304,42 +227,27 @@ class ChunkTest(unittest.TestCase):
         self.assertTrue(np.array_equal(input, output))
 
     def test_chunk_seed(self):
-        dim = 5
+        dim = 100
         num_points = 100
         chunk_size = (9, 8, 7)
-        num_workers = 2
 
         points = np.unique(np.random.randint(0, dim, (num_points, 3)), axis=0)
         num_points = points.shape[0]
-        pred = np.random.rand(num_points).astype(np.float16)
+        pred = np.random.rand(num_points) > 0.5
 
         gt = np.zeros((dim, dim, dim))
         gt[points[:, 0], points[:, 1], points[:, 2]] = pred
 
-        f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input", shape=[dim, dim, dim], dtype="f")
-        f.create_dataset("output", shape=[dim, dim, dim], dtype="f")
-        output = chunk.simple_chunk(
-            [f.get("output")],
-            [f.get("input")],
-            chunk_size,
-            _chunk_seed,
-            num_workers,
-            pass_params=True,
-            points=points,
-            pred=pred,
-        )
+        seeded = inference.chunk_seed(
+            [dim, dim, dim], points, pred, chunk_size
+        ).compute()
 
-        self.assertTrue(np.array_equal(gt, output[:]))
+        self.assertTrue(np.array_equal(gt, seeded))
 
     def test_chunk_max_pool(self):
         shape = (100, 100, 100)
         input = generate_simplex_noise(shape, 0.1)
         chunk_size = (9, 8, 7)
-        num_workers = 2
-
-        f = h5py.File("test.hdf5", "w")
-        f.create_dataset("input", data=input)
 
         gt = F.max_pool3d(
             torch.from_numpy(input).view(1, 1, *shape),
@@ -347,19 +255,14 @@ class ChunkTest(unittest.TestCase):
             stride=chunk_size,
             ceil_mode=True,
         )[0, 0]
-        output_shape = [math.ceil(shape[i] / chunk_size[i]) for i in range(3)]
-        output = np.zeros(output_shape)
-        chunk.simple_chunk(
-            [],
-            [f.get("input")],
-            chunk_size,
-            _chunk_max_pool,
-            num_workers,
-            pass_params=True,
-            output=output,
-        )
 
-        self.assertTrue(np.array_equal(gt.numpy(), output))
+        downsampled = dask_chunk.chunk(
+            inference._chunk_max_pool,
+            [da.from_array(input, chunks=chunk_size)],
+            [object],
+        ).compute(scheduler="single-threaded")
+
+        self.assertTrue(np.array_equal(gt.numpy(), downsampled))
 
 
 if __name__ == "__main__":

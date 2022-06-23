@@ -1,6 +1,4 @@
 import numpy as np
-import chunk
-import chunk_sphere
 import dask
 import dask.array as da
 import dask_chunk
