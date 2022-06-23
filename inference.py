@@ -7,6 +7,7 @@ import math
 
 import dask_chunk
 import dask_chunk_sphere
+from utils import dask_write_array
 
 import dask
 import dask.array as da
@@ -27,7 +28,6 @@ def _aggregate_dt(vol, real_anisotropy):
 
 
 def max_dt(vol, chunk_width, anisotropy):
-    # NOTE: NOTE: NOTE: implement this
     # chunk_width is in nanometers
     chunk_size = [math.ceil(chunk_width / anisotropy[i]) for i in range(3)]
     vol = da.rechunk(vol, chunks=tuple(chunk_size))
@@ -156,8 +156,8 @@ def chunk_seed(vol_shape, points, pred, chunk_size):
 
 
 def main(base_path, id):
-    with open(os.path.join(base_path, f"{str(id)}.npz")) as f:
-        pc = np.load(f["pc"])
+    with np.load(os.path.join(base_path, f"{str(id)}.npz")) as f:
+        pc = f["pc"]
     h5 = h5py.File(os.path.join(base_path, f"{str(id)}.h5"), "r")
     row = h5.get("row")
     vol_dataset = da.from_array(h5.get("main"), chunks=CHUNK_SIZE)
