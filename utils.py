@@ -34,21 +34,6 @@ def extend_bbox(bbox, max_shape):
     return bbox
 
 
-def create_compressed(dataset, name, shape, *args, **kwargs):
-    assert len(shape) >= 3
-
-    chunk_size = [i // 2 for i in CHUNK_SIZE]
-    chunk_size = [min(chunk_size[i], shape[i]) for i in range(3)]
-    chunk_size = tuple(chunk_size + list(shape[3:]))
-
-    kwargs["name"] = name
-    kwargs["shape"] = shape
-
-    return dataset.create_dataset(
-        *args, **kwargs, compression="gzip", chunks=chunk_size
-    )
-
-
 def dask_read_array(dataset):
     return da.from_array(dataset, chunks=CHUNK_SIZE)
 

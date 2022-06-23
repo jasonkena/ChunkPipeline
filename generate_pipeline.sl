@@ -27,6 +27,8 @@ cd /mmfs1/data/adhinart/dendrite/$BASE_PATH
 mkdir -p extracted
 # for points
 mkdir -p results
+mkdir -p pred
+mkdir -p inference
 mkdir -p baseline
 
 cp *.h5 $TMPDIR
@@ -41,15 +43,29 @@ else
     python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID
     cp $TMPDIR/$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/extracted/
 endif
-
 echo extract_seg finished
+
 if ( -f "$BASE_PATH/results/$SLURM_ARRAY_TASK_ID.npy" ) then
     echo Points already exist
+    cp $BASE_PATH/results/$SLURM_ARRAY_TASK_ID.npy $TMPDIR
 else
     python3 point.py $TMPDIR $SLURM_ARRAY_TASK_ID
     cp $TMPDIR/$SLURM_ARRAY_TASK_ID.npy $BASE_PATH/results/
 endif
 echo point_generation finished
+
+# NOTE: implement prediction
+echo Skipping prediction step, assuming pred path exists
+cp $BASE_PATH/pred/$SLURM_ARRAY_TASK_ID.npz $TMPDIR
+
+if ( -f "$BASE_PATH/inference/inferred_$SLURM_ARRAY_TASK_ID.h5" ) then
+    echo Inference already exists
+    cp $BASE_PATH/inference/inferred_$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
+else
+    python3 inference.py $TMPDIR $SLURM_ARRAY_TASK_ID
+    cp $TMPDIR/inferred_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/inference/
+endif
+echo inference finished
 
 if ( -f "$BASE_PATH/baseline/seg_$SLURM_ARRAY_TASK_ID.h5" ) then
     echo Baseline already exists

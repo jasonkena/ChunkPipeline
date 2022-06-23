@@ -1,8 +1,8 @@
 import numpy as np
 import h5py
-from utils import create_compressed, extend_bbox
 from settings import *
 import os
+import sys
 import math
 
 import dask_chunk
@@ -10,6 +10,8 @@ import dask_chunk_sphere
 
 import dask
 import dask.array as da
+
+from dask.diagnostics import ProgressBar
 
 
 def _chunk_max_pool(vol, block_info):
@@ -153,22 +155,26 @@ def chunk_seed(vol_shape, points, pred, chunk_size):
     return result
 
 
-if __name__ == "__main__":
-    ALL_BATCHES = h5py.File("dumb/batches.h5", "w")
-    h5 = h5py.File("dumb/1.h5", "r")
-    vol_dataset = h5.get("main")
-    vol_dataset = da.from_array(vol_dataset, chunks=CHUNK_SIZE)
+def main(base_path, id):
+    with open(os.path.join(base_path, f"{str(id)}.npz")) as f:
+        pc = np.load(f["pc"])
+    h5 = h5py.File(os.path.join(base_path, f"{str(id)}.h5"), "r")
     row = h5.get("row")
-    # points = np.load("dumb/1.npy")
-    points = np.load("dumb/1.npy")[:30000]
-    final = inference(
+    vol_dataset = da.from_array(h5.get("main"), chunks=CHUNK_SIZE)
+
+    final, voxel_counts = inference(
         row,
         vol_dataset,
-        points,
+        pc,
         PC_DOWNSAMPLE_RADIUS,
         ANISOTROPY,
         PC_PRED_THRESHOLD,
         CHUNK_SIZE,
         CONNECTIVITY,
     )
-    __import__("pdb").set_trace()
+    dask_write_array(os.path.join(base_path, f"inferred_{str(id)}.h5"), "main", final)
+
+
+if __name__ == "__main__":
+    with ProgressBar():
+        main(sys.argv[1], int(sys.argv[2]))
