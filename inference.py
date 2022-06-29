@@ -172,6 +172,7 @@ def main(base_path, id):
         CHUNK_SIZE,
         CONNECTIVITY,
     )
+    a = final.compute()
     dask_write_array(os.path.join(base_path, f"inferred_{str(id)}.h5"), "main", final)
 
 

@@ -283,13 +283,11 @@ def _chunk_half_extend_cc3d(vol, zyx_idx_mask, mask, connectivity, block_info):
         1, 1, 1, 3
     )
     zyx_idx_mask = zyx_idx_mask[: vol.shape[0], : vol.shape[1], : vol.shape[2]]
-    neighbors = np.concatenate(
-        (
-            zyx_idx_mask[mask],
-            connected_components[mask].reshape(-1, 1),
-        ),
-        axis=-1,
-    ).reshape(-1, zyx_idx_mask.shape[-1] + 1)
+
+    stacked = np.concatenate(
+        [zyx_idx_mask, np.expand_dims(connected_components, -1)], axis=-1
+    )
+    neighbors = stacked[mask]
 
     return [connected_components, neighbors]
 
@@ -319,12 +317,12 @@ def compute_remapping(uf_add, uf_union, partial_statistics, vol_shape, k):
         voxel_statistics = index_ragged(
             voxel_statistics, "voxel_counts", object_dtype=True
         )
-        new_counts = index_ragged(voxel_statistics, idx[:, 3])
 
         is_valid = idx[:, 3] < index_ragged(voxel_statistics, lambda x: x.shape[0])
         if not np.all(is_valid):
-            print("exists invalid unionfind, not a problem")
-        voxel_counts[i] += np.sum(new_counts[is_valid])
+            print("IndexError in voxel_counts")
+        new_counts = index_ragged(voxel_statistics[is_valid], idx[is_valid][:, 3])
+        voxel_counts[i] += np.sum(new_counts)
 
     order = np.argsort(voxel_counts)[::-1]
     voxel_counts = voxel_counts[order]
@@ -387,9 +385,9 @@ def chunk_cc3d(vol, connectivity, k):
     assert all([i > 1 for i in chunk_size])
 
     zyx_idx_mask = np.zeros([i + 1 for i in chunk_size] + [3], dtype=int)
-    zyx_idx_mask[-1:, :, :, 0] = 1
-    zyx_idx_mask[:, -1:, :, 1] = 1
-    zyx_idx_mask[:, :, -1:, 2] = 1
+    zyx_idx_mask[-1, :, :, 0] = 1
+    zyx_idx_mask[:, -1, :, 1] = 1
+    zyx_idx_mask[:, :, -1, 2] = 1
 
     # mask for half extend
     mask = np.ones([i + 1 for i in chunk_size], dtype=bool)

@@ -260,7 +260,7 @@ class ChunkTest(unittest.TestCase):
             inference._chunk_max_pool,
             [da.from_array(input, chunks=chunk_size)],
             [object],
-        ).compute(scheduler="single-threaded")
+        ).compute()
 
         self.assertTrue(np.array_equal(gt.numpy(), downsampled))
 
