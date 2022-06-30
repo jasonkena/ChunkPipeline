@@ -47,10 +47,12 @@ echo extract_seg finished
 
 if ( -f "$BASE_PATH/results/$SLURM_ARRAY_TASK_ID.npy" ) then
     echo Points already exist
-    cp $BASE_PATH/results/$SLURM_ARRAY_TASK_ID.npy $TMPDIR
+    cp $BASE_PATH/results/sparse_$SLURM_ARRAY_TASK_ID.npy $TMPDIR
+    cp $BASE_PATH/results/dense_$SLURM_ARRAY_TASK_ID.npy $TMPDIR
 else
     python3 point.py $TMPDIR $SLURM_ARRAY_TASK_ID
-    cp $TMPDIR/$SLURM_ARRAY_TASK_ID.npy $BASE_PATH/results/
+    cp $TMPDIR/sparse_$SLURM_ARRAY_TASK_ID.npy $BASE_PATH/results/
+    cp $TMPDIR/dense_$SLURM_ARRAY_TASK_ID.npy $BASE_PATH/results/
 endif
 echo point_generation finished
 

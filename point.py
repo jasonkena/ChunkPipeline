@@ -21,17 +21,27 @@ def main(base_path, id):
     bboxes = np.load(os.path.join(base_path, "bbox.npy")).astype(int)
     row = extend_bbox(bboxes[id - 1], spine.shape)
 
-    output_file = os.path.join(base_path, f"{row[0]}.npy")
-    if os.path.exists(output_file):
+    sparse_file = os.path.join(base_path, f"sparse_{row[0]}.npy")
+    dense_file = os.path.join(base_path, f"dense_{row[0]}.npy")
+    if os.path.exists(sparse_file) and os.path.exists(dense_file):
         return
 
     new_spine = dask_chunk.get_seg(spine, row, filter_id=True)
 
-    boundary = dask_chunk_sphere.get_boundary(all)
-    output = dask_chunk.chunk_nonzero(boundary, extra=new_spine)
-    output = output + np.array([row[1], row[3], row[5], 0]).reshape(1, -1)
+    if not os.path.exists(sparse_file):
+        boundary = dask_chunk_sphere.get_boundary(all)
+        sparse_output = dask_chunk.chunk_nonzero(boundary, extra=new_spine)
+        sparse_output = sparse_output + np.array([row[1], row[3], row[5], 0]).reshape(
+            1, -1
+        )
+        np.save(sparse_file, sparse_output.compute())
 
-    np.save(output_file, output.compute())
+    if not os.path.exists(dense_file):
+        dense_output = dask_chunk.chunk_nonzero(all, extra=new_spine)
+        dense_output = dense_output + np.array([row[1], row[3], row[5], 0]).reshape(
+            1, -1
+        )
+        np.save(dense_file, dense_output.compute())
 
 
 if __name__ == "__main__":
