@@ -45,7 +45,7 @@ else
 endif
 echo extract_seg finished
 
-if ( -f "$BASE_PATH/results/$SLURM_ARRAY_TASK_ID.npy" ) then
+if ( -f "$BASE_PATH/results/sparse_$SLURM_ARRAY_TASK_ID.npy" && -f "$BASE_PATH/results/dense_$SLURM_ARRAY_TASK_ID.npy" ) then
     echo Points already exist
     cp $BASE_PATH/results/sparse_$SLURM_ARRAY_TASK_ID.npy $TMPDIR
     cp $BASE_PATH/results/dense_$SLURM_ARRAY_TASK_ID.npy $TMPDIR
