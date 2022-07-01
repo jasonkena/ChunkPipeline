@@ -5,8 +5,8 @@ import os
 import sys
 import math
 
-import dask_chunk
-import dask_chunk_sphere
+import chunk
+import sphere
 from utils import dask_write_array
 
 import dask
@@ -21,7 +21,7 @@ def _chunk_max_pool(vol, block_info):
 
 @dask.delayed
 def _aggregate_dt(vol, real_anisotropy):
-    dt = dask_chunk_sphere._get_dt(
+    dt = sphere._get_dt(
         vol.astype(np.uint), real_anisotropy, black_border=False, block_info=None
     )
     return np.max(dt)
@@ -32,7 +32,7 @@ def max_dt(vol, chunk_width, anisotropy):
     chunk_size = [math.ceil(chunk_width / anisotropy[i]) for i in range(3)]
     vol = da.rechunk(vol, chunks=tuple(chunk_size))
 
-    downsampled = dask_chunk.chunk(_chunk_max_pool, [vol], [object])
+    downsampled = chunk.chunk(_chunk_max_pool, [vol], [object])
 
     # an approximation of chunk_width
     real_anisotropy = [chunk_size[i] * anisotropy[i] for i in range(3)]
@@ -86,14 +86,14 @@ def inference(
 
     # NOTE: downsample_radius could be a hyperparameter; it is computed for correctness
     dt_threshold = max_dt(vol_dataset, downsample_radius, anisotropy).compute()
-    trunk_dt = dask_chunk_sphere.get_dt(
+    trunk_dt = sphere.get_dt(
         seeded,
         anisotropy,
         False,
         dt_threshold,
         filter_idx=1,
     )
-    spine_dt = dask_chunk_sphere.get_dt(
+    spine_dt = sphere.get_dt(
         seeded,
         anisotropy,
         False,
@@ -103,7 +103,7 @@ def inference(
     # background 0, trunk 1, spine 2
     nearest_labels = ((spine_dt < trunk_dt) + 1) * vol_dataset
 
-    final, voxel_counts = dask_chunk.chunk_cc3d(nearest_labels, connectivity, False)
+    final, voxel_counts = chunk.chunk_cc3d(nearest_labels, connectivity, False)
 
     return final, voxel_counts
 
@@ -143,7 +143,7 @@ def chunk_seed(vol_shape, points, pred, chunk_size):
     for i, x in enumerate(unique_idx):
         chunked[x[0], x[1], x[2]] = splitted[i]
 
-    result = dask_chunk.chunk(
+    result = chunk.chunk(
         _chunk_seed,
         [
             da.zeros(vol_shape, chunks=chunk_size, dtype=int),

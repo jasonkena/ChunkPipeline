@@ -7,7 +7,7 @@ from settings import *
 from utils import dask_read_array, dask_write_array
 import dask
 import dask.array as da
-import dask_chunk
+import chunk
 
 import os
 import sys
@@ -64,7 +64,7 @@ def main(base_path, inputs, idx):
     for i in range(len(inputs)):
         input = dask_read_array(files[i].get("seg"))
         # NOTE: since Dask doesn't allow multidimensional indexing
-        dask_chunk.merge_seg(
+        chunk.merge_seg(
             final,
             input,
             bboxes[i],

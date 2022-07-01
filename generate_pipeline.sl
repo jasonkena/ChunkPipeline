@@ -72,7 +72,7 @@ echo inference finished
 if ( -f "$BASE_PATH/baseline/seg_$SLURM_ARRAY_TASK_ID.h5" ) then
     echo Baseline already exists
 else
-    python3 dask_chunk_sphere.py $TMPDIR $SLURM_ARRAY_TASK_ID
+    python3 sphere.py $TMPDIR $SLURM_ARRAY_TASK_ID
     cp $TMPDIR/seg_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/baseline/
 endif
 echo baseline finished

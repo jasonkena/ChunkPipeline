@@ -15,8 +15,8 @@ import dask
 import dask.array as da
 from dask.diagnostics import ProgressBar
 
-import dask_chunk
-import dask_chunk_sphere
+import chunk
+import sphere
 import inference
 
 
@@ -41,7 +41,7 @@ class ChunkTest(unittest.TestCase):
         # client = Client()
         # print(client.cluster)
 
-    def test_dask_chunk_output(self):
+    def test_chunk_output(self):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
         pad_width = (1, 2, 3)
@@ -57,7 +57,7 @@ class ChunkTest(unittest.TestCase):
             return [a > b]
 
         for pad in ["extend", "half_extend", False]:
-            output = dask_chunk.chunk(
+            output = chunk.chunk(
                 dumb,
                 input_datasets,
                 output_dataset_dtypes=["b"],
@@ -69,16 +69,14 @@ class ChunkTest(unittest.TestCase):
             with ProgressBar():
                 self.assertTrue(np.array_equal(output.compute(), gt))
 
-    def test_dask_chunk_bbox(self):
+    def test_chunk_bbox(self):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
 
         input = np.random.randint(0, 100000, shape)
         gt = get_bb_all3d(input)
 
-        output = dask_chunk.chunk_bbox(
-            da.from_array(input, chunks=chunk_size)
-        ).compute()
+        output = chunk.chunk_bbox(da.from_array(input, chunks=chunk_size)).compute()
         self.assertTrue(np.array_equal(output, gt))
 
     def test_dask_cc3d(self):
@@ -89,7 +87,7 @@ class ChunkTest(unittest.TestCase):
 
         input = np.random.rand(*shape) > 0.8
 
-        output = dask_chunk.chunk_cc3d(
+        output = chunk.chunk_cc3d(
             da.from_array(input, chunks=chunk_size),
             connectivity,
             k,
@@ -116,7 +114,7 @@ class ChunkTest(unittest.TestCase):
         input = np.ones((pad * 2 + 1, pad * 2 + 1, pad * 2 + 1))
         input[pad, pad, pad] = 0
 
-        output = dask_chunk_sphere._get_dt(input, anisotropy, False, None)[0]
+        output = sphere._get_dt(input, anisotropy, False, None)[0]
 
         assert output[0, pad, pad] == anisotropy[0] * pad
         assert output[pad, 0, pad] == anisotropy[1] * pad
@@ -131,7 +129,7 @@ class ChunkTest(unittest.TestCase):
         input = generate_simplex_noise(shape, 0.1)  # > 0 #np.random.rand(*shape) > 0.5
         input = input > input.mean()
 
-        output = dask_chunk_sphere.get_dt(
+        output = sphere.get_dt(
             da.from_array(input, chunks=chunk_size),
             anisotropy,
             False,
@@ -139,7 +137,7 @@ class ChunkTest(unittest.TestCase):
         ).compute()
         output_idx = output[:] <= threshold
 
-        gt = dask_chunk_sphere._get_dt(input, anisotropy, False, None)[0]
+        gt = sphere._get_dt(input, anisotropy, False, None)[0]
         gt_idx = gt <= threshold
 
         num_errors = np.logical_xor(output_idx, gt_idx)
@@ -155,9 +153,7 @@ class ChunkTest(unittest.TestCase):
         input = np.random.rand(*shape) > 0.5
 
         with ProgressBar():
-            output = dask_chunk_sphere.get_boundary(
-                da.from_array(input, chunks=chunk_size)
-            )
+            output = sphere.get_boundary(da.from_array(input, chunks=chunk_size))
             output = output.compute()
 
         padded_vol = torch.from_numpy(pad_vol(input, [3, 3, 3]))
@@ -175,19 +171,19 @@ class ChunkTest(unittest.TestCase):
 
         self.assertTrue(np.array_equal(output, boundary))
 
-    def test_dask_chunk_nonzero(self):
+    def test_chunk_nonzero(self):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
 
         input = np.random.rand(*shape) > 0.5
         gt = np.stack(np.nonzero(input), axis=1)
 
-        output = dask_chunk.chunk_nonzero(da.from_array(input, chunks=chunk_size))
+        output = chunk.chunk_nonzero(da.from_array(input, chunks=chunk_size))
         self.assertTrue(np.array_equal(gt, output.compute()))
 
         extra = np.random.randint(0, 100, shape)
         gt_extra = np.concatenate([gt, extra[input].reshape(-1, 1)], axis=1)
-        output_extra = dask_chunk.chunk_nonzero(
+        output_extra = chunk.chunk_nonzero(
             da.from_array(input, chunks=chunk_size),
             extra=da.from_array(extra, chunks=chunk_size),
         )
@@ -204,10 +200,10 @@ class ChunkTest(unittest.TestCase):
         input_da = da.from_array(input, chunks=chunk_size)
 
         # get first row
-        bbox = dask_chunk.chunk_bbox(input_da).compute()[0]
+        bbox = chunk.chunk_bbox(input_da).compute()[0]
         assert bbox[0] == 1
 
-        seg = dask_chunk.get_seg(input_da, bbox, filter_id=True).compute()
+        seg = chunk.get_seg(input_da, bbox, filter_id=True).compute()
 
         gt = (
             input[bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1]
@@ -217,7 +213,7 @@ class ChunkTest(unittest.TestCase):
         self.assertTrue(np.array_equal(seg, gt))
 
         # test merge_seg
-        output = dask_chunk.merge_seg(
+        output = chunk.merge_seg(
             da.zeros(shape, chunks=chunk_size, dtype=np.uint),
             input[bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1],
             bbox,
@@ -256,7 +252,7 @@ class ChunkTest(unittest.TestCase):
             ceil_mode=True,
         )[0, 0]
 
-        downsampled = dask_chunk.chunk(
+        downsampled = chunk.chunk(
             inference._chunk_max_pool,
             [da.from_array(input, chunks=chunk_size)],
             [object],

@@ -12,7 +12,7 @@ from settings import *
 import numpy as np
 import dask.array as da
 import dask
-import dask_chunk
+import chunk
 from utils import dask_read_array, dask_write_array
 from settings import *
 
@@ -42,7 +42,7 @@ def get_boundary(vol):
     # NOTE: this function intentionally ignores anisotropy
     # TODO: can prevent double input chunks to full chunk_size; no way to elegantly implement it
 
-    boundary = dask_chunk.chunk(_chunk_get_boundary, [vol], [bool], pad="extend")
+    boundary = chunk.chunk(_chunk_get_boundary, [vol], [bool], pad="extend")
     boundary = da.logical_and(boundary, vol)
 
     return boundary
@@ -101,7 +101,7 @@ def get_dt(
     if filter_idx is not None:
         vol = (vol != filter_idx).astype(vol.dtype)
 
-    return dask_chunk.chunk(
+    return chunk.chunk(
         _get_dt,
         [vol],
         [float],
@@ -124,7 +124,7 @@ def get_expand_edt(
     # threshold: edt distance threshold
     pad_width = [math.ceil(threshold / i) for i in anisotropy]
 
-    return dask_chunk.chunk(
+    return chunk.chunk(
         _get_expand_edt,
         [vol],
         [bool],
@@ -177,7 +177,7 @@ def extract(
     remaining = dt >= max_erode
     # TODO: do not hardcode dtype
     # ignoring voxel_counts
-    expanded, _ = dask_chunk.chunk_cc3d(remaining, connectivity, k=1)
+    expanded, _ = chunk.chunk_cc3d(remaining, connectivity, k=1)
 
     # TODO: assert that final segmentation is only composed of single CC
     for _ in range(num_iter):
@@ -188,7 +188,7 @@ def extract(
     merged = expanded + (2 * others)
     # segment everything
     # this assumes that the expanded trunk is larger than any of the non-eroded spines
-    seg, voxel_counts = dask_chunk.chunk_cc3d(
+    seg, voxel_counts = chunk.chunk_cc3d(
         merged,
         connectivity,
         k=False,
@@ -214,7 +214,7 @@ def main(base_path, id):
         input, ANISOTROPY, CONNECTIVITY, MAX_ERODE, ERODE_DELTA, NUM_ITER
     )
 
-    bboxes = dask_chunk.chunk_bbox(seg)
+    bboxes = chunk.chunk_bbox(seg)
     # cat voxel_counts to end of bboxes, removing background voxel countvc
     seg_bbox = generate_seg_bbox(bboxes, voxel_counts)
     seg_bbox = da.from_delayed(seg_bbox, shape=(np.nan, 8), dtype=int)

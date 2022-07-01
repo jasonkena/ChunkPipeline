@@ -1,8 +1,8 @@
 import numpy as np
 import dask
 import dask.array as da
-import dask_chunk
-import dask_chunk_sphere
+import chunk
+import sphere
 import h5py
 import os
 import sys
@@ -26,18 +26,18 @@ def main(base_path, id):
     if os.path.exists(sparse_file) and os.path.exists(dense_file):
         return
 
-    new_spine = dask_chunk.get_seg(spine, row, filter_id=True)
+    new_spine = chunk.get_seg(spine, row, filter_id=True)
 
     if not os.path.exists(sparse_file):
-        boundary = dask_chunk_sphere.get_boundary(all)
-        sparse_output = dask_chunk.chunk_nonzero(boundary, extra=new_spine)
+        boundary = sphere.get_boundary(all)
+        sparse_output = chunk.chunk_nonzero(boundary, extra=new_spine)
         sparse_output = sparse_output + np.array([row[1], row[3], row[5], 0]).reshape(
             1, -1
         )
         np.save(sparse_file, sparse_output.compute())
 
     if not os.path.exists(dense_file):
-        dense_output = dask_chunk.chunk_nonzero(all, extra=new_spine)
+        dense_output = chunk.chunk_nonzero(all, extra=new_spine)
         dense_output = dense_output + np.array([row[1], row[3], row[5], 0]).reshape(
             1, -1
         )

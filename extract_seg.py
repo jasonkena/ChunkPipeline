@@ -2,7 +2,7 @@ import numpy as np
 import h5py
 import os
 import sys
-import dask_chunk
+import chunk
 from settings import *
 from utils import extend_bbox, dask_read_array, dask_write_array
 from dask.diagnostics import ProgressBar
@@ -18,7 +18,7 @@ def main(base_path, id):
 
     output_file = os.path.join(base_path, f"{row[0]}.h5")
 
-    seg = dask_chunk.get_seg(all, row, filter_id=True)
+    seg = chunk.get_seg(all, row, filter_id=True)
 
     file = dask_write_array(output_file, "main", seg)
     file.create_dataset("row", data=row)
