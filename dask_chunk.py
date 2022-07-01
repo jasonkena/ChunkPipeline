@@ -203,12 +203,19 @@ def chunk_bbox(vol):
     return bboxes
 
 
-def _chunk_cc3d_neighbors(
-    partial_cc3d, partial_statistics, neighbors, mask, block_info
-):
-    mask = mask[
-        : partial_cc3d.shape[0], : partial_cc3d.shape[1], : partial_cc3d.shape[2]
-    ]
+def _chunk_cc3d_neighbors(partial_cc3d, partial_statistics, neighbors, block_info):
+    chunk_idx = block_info[0]["chunk-location"]
+    num_chunks = block_info[0]["num-chunks"]
+
+    # TOOD: refactor mask generation into separate function
+    mask = np.zeros(partial_cc3d.shape, dtype=bool)
+    # increment zyx_idx if not on boundary
+    if chunk_idx[0] != num_chunks[0] - 1:
+        mask[-2:, :, :] = True
+    if chunk_idx[1] != num_chunks[1] - 1:
+        mask[:, -2:, :] = True
+    if chunk_idx[2] != num_chunks[2] - 1:
+        mask[:, :, -2:] = True
 
     partial_statistics = partial_statistics.item()
     neighbors = neighbors.item()
@@ -275,14 +282,27 @@ def chunk_remap(vol, remapping):
     )
 
 
-def _chunk_half_extend_cc3d(vol, zyx_idx_mask, mask, connectivity, block_info):
-    connected_components = cc3d.connected_components(vol, connectivity=connectivity)
-    # trim mask to fit chunk
-    mask = mask[: vol.shape[0], : vol.shape[1], : vol.shape[2]]
+def _chunk_half_extend_cc3d(vol, connectivity, block_info):
+    chunk_idx = block_info[0]["chunk-location"]
+    num_chunks = block_info[0]["num-chunks"]
+
+    zyx_idx_mask = np.zeros(list(vol.shape) + [3], dtype=int)
+    mask = np.zeros(vol.shape, dtype=bool)
+    # increment zyx_idx if not on boundary
+    if chunk_idx[0] != num_chunks[0] - 1:
+        zyx_idx_mask[-1, :, :, 0] = 1
+        mask[-2:, :, :] = True
+    if chunk_idx[1] != num_chunks[1] - 1:
+        zyx_idx_mask[:, -1, :, 1] = 1
+        mask[:, -2:, :] = True
+    if chunk_idx[2] != num_chunks[2] - 1:
+        zyx_idx_mask[:, :, -1, 2] = 1
+        mask[:, :, -2:] = True
     zyx_idx_mask = zyx_idx_mask + np.array(block_info[0]["chunk-location"]).reshape(
         1, 1, 1, 3
     )
-    zyx_idx_mask = zyx_idx_mask[: vol.shape[0], : vol.shape[1], : vol.shape[2]]
+
+    connected_components = cc3d.connected_components(vol, connectivity=connectivity)
 
     stacked = np.concatenate(
         [zyx_idx_mask, np.expand_dims(connected_components, -1)], axis=-1
@@ -384,23 +404,11 @@ def chunk_cc3d(vol, connectivity, k):
     # cc3d only handles inputs > 1
     assert all([i > 1 for i in chunk_size])
 
-    zyx_idx_mask = np.zeros([i + 1 for i in chunk_size] + [3], dtype=int)
-    zyx_idx_mask[-1, :, :, 0] = 1
-    zyx_idx_mask[:, -1, :, 1] = 1
-    zyx_idx_mask[:, :, -1, 2] = 1
-
-    # mask for half extend
-    mask = np.ones([i + 1 for i in chunk_size], dtype=bool)
-    # 2 instead of 1 because of [[0,1], [1,0]] edge case
-    mask[:-2, :-2, :-2] = False
-
     partial_cc3d, neighbors = chunk(
         _chunk_half_extend_cc3d,
         [vol],
         [int, object],
         pad="half_extend",
-        zyx_idx_mask=zyx_idx_mask,
-        mask=mask,
         connectivity=connectivity,
     )
 
@@ -415,7 +423,6 @@ def chunk_cc3d(vol, connectivity, k):
         [partial_cc3d, partial_statistics, neighbors],
         [object, object],
         pad="half_extend",
-        mask=mask,
     )
 
     temp = compute_remapping(uf_add, uf_union, partial_statistics, vol.shape, k)
