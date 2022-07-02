@@ -57,7 +57,7 @@ def main(base_path, inputs, idx):
 
     final = da.zeros(
         shape=h5py.File(os.path.join(base_path, "raw.h5")).get("main").shape,
-        dtype=int,
+        dtype=UINT_DTYPE,
         chunks=CHUNK_SIZE,
     )
 

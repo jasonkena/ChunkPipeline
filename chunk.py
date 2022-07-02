@@ -8,6 +8,7 @@ import cc3d
 from unionfind import UnionFind
 import string
 import itertools
+from settings import *
 
 import math
 
@@ -187,7 +188,7 @@ def _bbox_aggregate(bboxes):
             result[-1][j] = np.min(bboxes[idx[i] : idx[i + 1], j])
         for j in [2, 4, 6]:
             result[-1][j] = np.max(bboxes[idx[i] : idx[i + 1], j])
-    return np.array(result, dtype=int)
+    return np.array(result, dtype=UINT_DTYPE)
 
 
 def chunk_bbox(vol):
@@ -199,7 +200,9 @@ def chunk_bbox(vol):
     # restore original coordinates
     # [z,y,x], then [seg id, zmin, zmax, etc]
     bboxes = chunk(_chunk_bbox, [vol], output_dataset_dtypes=[object])
-    bboxes = da.from_delayed(_bbox_aggregate(bboxes), shape=(np.nan, 7), dtype=int)
+    bboxes = da.from_delayed(
+        _bbox_aggregate(bboxes), shape=(np.nan, 7), dtype=UINT_DTYPE
+    )
     return bboxes
 
 
@@ -309,7 +312,7 @@ def _chunk_half_extend_cc3d(vol, connectivity, block_info):
     )
     neighbors = stacked[mask]
 
-    return [connected_components, neighbors]
+    return [connected_components.astype(UINT_DTYPE), neighbors.astype(UINT_DTYPE)]
 
 
 @dask.delayed
@@ -407,13 +410,13 @@ def chunk_cc3d(vol, connectivity, k):
     partial_cc3d, neighbors = chunk(
         _chunk_half_extend_cc3d,
         [vol],
-        [int, object],
+        [UINT_DTYPE, object],
         pad="half_extend",
         connectivity=connectivity,
     )
 
     partial_statistics = chunk(
-        lambda vol, block_info: [cc3d.statistics(vol.astype(np.uint64))],
+        lambda vol, block_info: [cc3d.statistics(vol.astype(UINT_DTYPE))],
         [partial_cc3d],
         [object],
     )
@@ -449,7 +452,7 @@ def _chunk_nonzero(vol, extra=None, block_info=None):
     if extra is not None:
         idx = np.concatenate([idx, extra.reshape(-1, 1)], axis=1)
 
-    return [idx]
+    return [idx.astype(UINT_DTYPE)]
 
 
 @dask.delayed
@@ -469,7 +472,9 @@ def chunk_nonzero(vol, extra=None):
         align_idx=([0, 1] if extra is not None else None),
     )
     result = _aggregate_nonzero(result)
-    result = da.from_delayed(result, shape=[np.nan, 3 + (extra is not None)], dtype=int)
+    result = da.from_delayed(
+        result, shape=[np.nan, 3 + (extra is not None)], dtype=UINT_DTYPE
+    )
     return result
 
 

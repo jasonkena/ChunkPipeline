@@ -175,7 +175,6 @@ def extract(
 
     dt = get_dt(vol, anisotropy, black_border=False, threshold=max_erode + erode_delta)
     remaining = dt >= max_erode
-    # TODO: do not hardcode dtype
     # ignoring voxel_counts
     expanded, _ = chunk.chunk_cc3d(remaining, connectivity, k=1)
 
@@ -217,7 +216,7 @@ def main(base_path, id):
     bboxes = chunk.chunk_bbox(seg)
     # cat voxel_counts to end of bboxes, removing background voxel countvc
     seg_bbox = generate_seg_bbox(bboxes, voxel_counts)
-    seg_bbox = da.from_delayed(seg_bbox, shape=(np.nan, 8), dtype=int)
+    seg_bbox = da.from_delayed(seg_bbox, shape=(np.nan, 8), dtype=UINT_DTYPE)
 
     file = dask_write_array(output, "seg", seg)
     file.create_dataset("seg_bbox", data=seg_bbox.compute())

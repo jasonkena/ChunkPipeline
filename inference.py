@@ -22,7 +22,7 @@ def _chunk_max_pool(vol, block_info):
 @dask.delayed
 def _aggregate_dt(vol, real_anisotropy):
     dt = sphere._get_dt(
-        vol.astype(np.uint), real_anisotropy, black_border=False, block_info=None
+        vol.astype(UINT_DTYPE), real_anisotropy, black_border=False, block_info=None
     )
     return np.max(dt)
 
@@ -146,10 +146,10 @@ def chunk_seed(vol_shape, points, pred, chunk_size):
     result = chunk.chunk(
         _chunk_seed,
         [
-            da.zeros(vol_shape, chunks=chunk_size, dtype=int),
+            da.zeros(vol_shape, chunks=chunk_size, dtype=UINT_DTYPE),
             da.from_array(chunked, chunks=(1, 1, 1)),
         ],
-        [int],
+        [UINT_DTYPE],
     )
 
     return result

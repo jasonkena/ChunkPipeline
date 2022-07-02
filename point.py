@@ -18,7 +18,7 @@ def main(base_path, id):
     spine = h5py.File(os.path.join(base_path, "spine.h5")).get("main")
     spine = dask_read_array(spine)
 
-    bboxes = np.load(os.path.join(base_path, "bbox.npy")).astype(int)
+    bboxes = np.load(os.path.join(base_path, "bbox.npy"))
     row = extend_bbox(bboxes[id - 1], spine.shape)
 
     sparse_file = os.path.join(base_path, f"sparse_{row[0]}.npy")
