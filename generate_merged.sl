@@ -12,7 +12,7 @@
 # assumes that den_6nm_bb.npy exists
 # entire pipeline for generating files base h5 up to the final segmentation, + point generation
 # merge has to be run manually
-setenv BASE_PATH human
+setenv BASE_PATH mouse
 
 module purge
 module load anaconda

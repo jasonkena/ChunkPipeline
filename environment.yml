@@ -8,7 +8,8 @@ dependencies:
   - pytorch
   - cython
   - numba
-  - tqdm
+  - dask
+  - dask-jobqueue
   - pip
   - pip:
     - opensimplex
