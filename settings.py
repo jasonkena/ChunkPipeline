@@ -24,7 +24,13 @@ NUM_DENDRITES = 50
 # SLURM cluster config
 SLURM_PROJECT_NAME = "dendrite"
 SLURM_PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100"
-SLURM_CORES_PER_JOB = 4
-SLURM_MEMORY_PER_JOB = "4GB"
+SLURM_CORES_PER_JOB = 48
+SLURM_MEMORY_PER_JOB = "30GB"
 SLURM_WALLTIME = "120:00:00"
-SLURM_MAX_JOBS = 100
+SLURM_MIN_JOBS = 5
+SLURM_MAX_JOBS = 50
+SLURM_LOCAL_DIRECTORY = "/scratch/adhinart"
+SLURM_SCALE_INTERVAL = "10s"  # how long until new scaling
+SLURM_TARGET_DURATION = "60s"  # how long one task is supposed to take
+SLURM_DASHBOARD_PORT = 8888
+SLURM_WAIT_COUNT = 10
