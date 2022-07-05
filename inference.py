@@ -157,7 +157,9 @@ def chunk_seed(vol_shape, points, pred, chunk_size):
 
 def main(base_path, id):
     with np.load(os.path.join(base_path, f"{str(id)}.npz")) as f:
-        pc = f["pc"]
+        pc = f["pc"][:, :3]
+        pred = f["pred"]
+        pc = np.concatenate([pc, pred.reshape(-1, 1)], axis=1)
     h5 = h5py.File(os.path.join(base_path, f"{str(id)}.h5"), "r")
     row = h5.get("row")
     vol_dataset = da.from_array(h5.get("main"), chunks=CHUNK_SIZE)
