@@ -36,14 +36,25 @@ cp *.npy $TMPDIR
 
 cd ..
 
+# extraction for raw.h5
 if ( -f "$BASE_PATH/extracted/$SLURM_ARRAY_TASK_ID.h5" ) then
     echo Extraction already exists
     cp $BASE_PATH/extracted/$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
 else
-    python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID
+    python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID raw
     cp $TMPDIR/$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/extracted/
 endif
 echo extract_seg finished
+
+# extraction for raw_gt.h5
+if ( -f "$BASE_PATH/extracted/gt_$SLURM_ARRAY_TASK_ID.h5" ) then
+    echo GT Extraction already exists
+    cp $BASE_PATH/extracted/gt_$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
+else
+    python3 extract_seg.py $TMPDIR $SLURM_ARRAY_TASK_ID raw_gt
+    cp $TMPDIR/gt_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/extracted/
+endif
+echo gt_extract_seg finished
 
 if ( -f "$BASE_PATH/results/sparse_$SLURM_ARRAY_TASK_ID.npy" && -f "$BASE_PATH/results/dense_$SLURM_ARRAY_TASK_ID.npy" ) then
     echo Points already exist
