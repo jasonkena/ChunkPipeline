@@ -19,6 +19,15 @@ import chunk
 import sphere
 import inference
 
+from stardist.data import test_image_nuclei_3d
+from scipy.ndimage import rotate
+from stardist.matching import matching as stardist_matching
+import evaluation
+
+from dask_jobqueue import SLURMCluster
+from dask.distributed import Client
+from settings import *
+
 
 def generate_simplex_noise(shape, feature_scale):
     try:
@@ -30,6 +39,17 @@ def generate_simplex_noise(shape, feature_scale):
 
 
 class ChunkTest(unittest.TestCase):
+    # @classmethod
+    # def setUpClass(cls):
+    #     cluster = SLURMCluster(
+    #         job_name="dendrite_test",
+    #         queue=SLURM_PARTITIONS,
+    #         cores=20,
+    #         memory="10GB",
+    #     )
+    #     cluster.scale(10)
+    #     client = Client(cluster)
+    #
     def setUp(self):
         np.random.seed(0)
         opensimplex.seed(0)
@@ -73,7 +93,7 @@ class ChunkTest(unittest.TestCase):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
 
-        input = np.random.randint(0, 100000, shape)
+        input = np.random.randint(0, 2 ** 16 - 1, shape)
         gt = get_bb_all3d(input)
 
         output = chunk.chunk_bbox(da.from_array(input, chunks=chunk_size)).compute()
@@ -259,6 +279,21 @@ class ChunkTest(unittest.TestCase):
         ).compute()
 
         self.assertTrue(np.array_equal(gt.numpy(), downsampled))
+
+    def test_evaluation(self):
+        chunk_size = (9, 8, 7)
+
+        _, y_true = test_image_nuclei_3d(return_mask=True)
+        y_pred = rotate(y_true, 2, order=0, reshape=False)
+
+        gt_metrics = stardist_matching(y_true, y_pred)
+        temp = evaluation.get_scores(
+            da.from_array(y_true, chunks=chunk_size),
+            da.from_array(y_pred, chunks=chunk_size),
+        )
+        pred_metrics = evaluation.matching(*temp).compute()
+
+        self.assertTrue(gt_metrics, pred_metrics)
 
 
 if __name__ == "__main__":

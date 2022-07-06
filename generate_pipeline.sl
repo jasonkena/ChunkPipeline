@@ -3,7 +3,7 @@
 #SBATCH --array=1-10 # inclusive range
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task 20 # 1 cpu on single node
+#SBATCH --cpus-per-task 48 # 1 cpu on single node
 #SBATCH --mem=30gb # Job memory request
 #SBATCH --time=120:00:00 # Time limit hrs:min:sec
 #SBATCH --mail-type=BEGIN,END,FAIL. # Mail events (NONE, BEGIN, END, FAIL, ALL)

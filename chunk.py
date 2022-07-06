@@ -279,7 +279,9 @@ def _chunk_cc3d_neighbors(partial_cc3d, partial_statistics, neighbors, block_inf
 
 def chunk_remap(vol, remapping):
     return chunk(
-        lambda vol, remapping, block_info: [remapping.item()[vol]],
+        lambda vol, remapping, block_info: [
+            remapping.item()[vol] if remapping.dtype == object else remapping[vol]
+        ],
         [vol, remapping],
         [vol.dtype],
     )
