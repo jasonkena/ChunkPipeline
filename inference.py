@@ -7,7 +7,7 @@ import math
 
 import chunk
 import sphere
-from utils import dask_write_array
+from utils import dask_write_array, dask_read_array
 
 import dask
 import dask.array as da
@@ -162,7 +162,7 @@ def main(base_path, id):
         pc = np.concatenate([pc, pred.reshape(-1, 1)], axis=1)
     h5 = h5py.File(os.path.join(base_path, f"{str(id)}.h5"), "r")
     row = h5.get("row")
-    vol_dataset = da.from_array(h5.get("main"), chunks=CHUNK_SIZE)
+    vol_dataset = dask_read_array(h5.get("main"))
 
     final, voxel_counts = inference(
         row,
@@ -174,7 +174,7 @@ def main(base_path, id):
         CHUNK_SIZE,
         CONNECTIVITY,
     )
-    dask_write_array(os.path.join(base_path, f"inferred_{str(id)}.h5"), "main", final)
+    dask_write_array(os.path.join(base_path, f"inferred_{str(id)}.h5"), "seg", final)
 
 
 if __name__ == "__main__":

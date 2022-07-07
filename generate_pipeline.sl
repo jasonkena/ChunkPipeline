@@ -15,7 +15,7 @@
 # merge has to be run manually
 module purge
 module load anaconda
-conda activate dendrite
+conda activate clean_dendrite
 
 setenv BASE_PATH mouse
 setenv TMPDIR /scratch/adhinart/dendrite/$SLURM_ARRAY_TASK_ID/$BASE_PATH
@@ -30,6 +30,7 @@ mkdir -p results
 mkdir -p pred
 mkdir -p inference
 mkdir -p baseline
+mkdir -p scores
 
 cp *.h5 $TMPDIR
 cp *.npy $TMPDIR
@@ -80,12 +81,31 @@ else
 endif
 echo inference finished
 
+if ( -f "$BASE_PATH/scores/scores_inferred_$SLURM_ARRAY_TASK_ID.h5" ) then
+    echo Inference scores already exists
+    cp $BASE_PATH/scores/scores_inferred_$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
+else
+    python3 evaluation.py $TMPDIR $SLURM_ARRAY_TASK_ID inference
+    cp $TMPDIR/scores_inferred_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/scores/
+endif
+echo inference scoring finished
+
 if ( -f "$BASE_PATH/baseline/seg_$SLURM_ARRAY_TASK_ID.h5" ) then
     echo Baseline already exists
+    cp $BASE_PATH/baseline/seg_$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
 else
     python3 sphere.py $TMPDIR $SLURM_ARRAY_TASK_ID
     cp $TMPDIR/seg_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/baseline/
 endif
 echo baseline finished
+
+if ( -f "$BASE_PATH/scores/scores_seg_$SLURM_ARRAY_TASK_ID.h5" ) then
+    echo Baseline scores already exists
+    cp $BASE_PATH/scores/scores_seg_$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
+else
+    python3 evaluation.py $TMPDIR $SLURM_ARRAY_TASK_ID baseline
+    cp $TMPDIR/scores_seg_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/scores/
+endif
+echo baseline scoring finished
 
 rm -rf $TMPDIR

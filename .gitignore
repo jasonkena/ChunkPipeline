@@ -4,3 +4,4 @@ old/
 *.npy
 *.txt
 *.out
+dask-worker-space/

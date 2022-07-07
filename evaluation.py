@@ -1,15 +1,19 @@
 # adapted from https://github.com/stardist/stardist/blob/f73cdc44f718d36844b38c1f1662dbb66d157182/stardist/matching.py
 import numpy as np
+import os
+import sys
+import h5py
 
 from numba import jit
-from tqdm import tqdm
 from scipy.optimize import linear_sum_assignment
-from skimage.measure import regionprops
 from collections import namedtuple
 
 import dask
 import dask.array as da
+from dask.diagnostics import ProgressBar
+
 import chunk
+from utils import dask_read_array, dask_write_array
 
 matching_criteria = dict()
 
@@ -29,7 +33,7 @@ def _chunk_relabel(unique):
 def chunk_relabel_sequential(vol):
     # remap integers to lowest possible integers while preserving original order
     # whilst treating 0 as background
-    unique, inverse = da.unique(vol, return_inverse=True)
+    unique, inverse = chunk.chunk_unique(vol, return_inverse=True)
     temp = _chunk_relabel(unique)
     remapping, inverse_map = [
         da.from_delayed(temp[i], shape=[np.nan], dtype=vol.dtype) for i in range(2)
@@ -39,13 +43,21 @@ def chunk_relabel_sequential(vol):
     return remapped, inverse_map
 
 
-def label_overlap(x, y, x_max, y_max, block_info):
+@jit(nopython=True)
+def _label_overlap(x, y, x_max, y_max):
     x = x.ravel()
     y = y.ravel()
     overlap = np.zeros((1 + x_max, 1 + y_max), dtype=np.uint)
     for i in range(len(x)):
         overlap[x[i], y[i]] += 1
     return [overlap]
+
+
+def label_overlap(*args, **kwargs):
+    # NOTE: refactor chunk.chunk so that passing block_info into func is optional
+    # remove block_info from input
+    kwargs.pop("block_info")
+    return _label_overlap(*args, **kwargs)
 
 
 def _safe_divide(x, y, eps=1e-10):
@@ -265,3 +277,37 @@ def matching(
     result = [_single(scores, map_rev_true, map_rev_pred, x) for x in thresh]
 
     return result if len(result) > 1 else result[0]
+
+
+def main(base_path, id, h5):
+    if h5 == "inference":
+        h5 = f"inferred_{id}.h5"
+    elif h5 == "baseline":
+        h5 = f"seg_{id}.h5"
+    else:
+        raise ValueError("h5 must be either 'inference' or 'baseline'")
+
+    pred = h5py.File(os.path.join(base_path, h5)).get("seg")
+    pred = dask_read_array(pred)
+    # map trunk to background
+    pred = pred * (pred > 1)
+
+    gt = h5py.File(os.path.join(base_path, f"gt_{id}.h5")).get("main")
+    gt = dask_read_array(gt)
+
+    scores, map_rev_true, map_rev_pred, criterion = dask.compute(
+        *get_scores(gt, pred, criterion="iou"), scheduler="single-threaded"
+    )
+
+    file = h5py.File(os.path.join(base_path, "scores_" + h5), "w")
+    file.create_dataset("scores", data=scores)
+    file.create_dataset("map_rev_true", data=map_rev_true)
+    file.create_dataset("map_rev_pred", data=map_rev_pred)
+    file.attrs["criterion"] = criterion
+
+    file.close()
+
+
+if __name__ == "__main__":
+    with ProgressBar():
+        main(sys.argv[1], int(sys.argv[2]), sys.argv[3])

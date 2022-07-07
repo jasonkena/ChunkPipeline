@@ -13,14 +13,16 @@ def main(base_path, id, h5):
     bboxes = np.load(os.path.join(base_path, "bbox.npy")).astype(int)
 
     # id is in range(50)
-    row = extend_bbox(bboxes[id - 1], all.shape)
+    row = extend_bbox(
+        bboxes[id - 1], h5py.File(os.path.join(base_path, "raw.h5")).get("main").shape
+    )
 
     if "gt" not in h5:
         raw = h5py.File(os.path.join(base_path, "raw.h5")).get("main")
         raw = dask_read_array(raw)
 
         output_file = os.path.join(base_path, f"{row[0]}.h5")
-        seg = chunk.get_seg(all, row, filter_id=True)
+        seg = chunk.get_seg(raw, row, filter_id=True)
     else:
         raw = h5py.File(os.path.join(base_path, f"{row[0]}.h5")).get("main")
         raw = dask_read_array(raw)
@@ -29,6 +31,7 @@ def main(base_path, id, h5):
         raw_gt = dask_read_array(raw_gt)
 
         output_file = os.path.join(base_path, f"gt_{row[0]}.h5")
+        # NOTE: this does not include the trunk as a segmentation
         seg = chunk.get_seg(raw_gt, row, filter_id=False) * raw
 
     file = dask_write_array(output_file, "main", seg)
