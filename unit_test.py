@@ -295,6 +295,28 @@ class ChunkTest(unittest.TestCase):
 
         self.assertTrue(gt_metrics, pred_metrics)
 
+    def test_chunk_unique(self):
+        # test both argwhere_seg and simple_chunk's bbox
+        shape = (100, 100, 100)
+        chunk_size = (9, 8, 7)
+
+        input = np.zeros(shape, dtype=int)
+        input[40:60, 40:60, 40:60] = np.random.randint(0, 100, (20, 20, 20))
+
+        gt_unique, gt_inverse = np.unique(input, return_inverse=True)
+        unique, inverse = dask.compute(
+            *chunk.chunk_unique(
+                da.from_array(input, chunks=chunk_size), return_inverse=True
+            )
+        )
+        self.assertTrue(np.array_equal(gt_unique, unique))
+        self.assertTrue(np.array_equal(gt_inverse.reshape(shape), inverse[:]))
+
+        unique = chunk.chunk_unique(
+            da.from_array(input, chunks=chunk_size), return_inverse=False
+        ).compute()
+        self.assertTrue(np.array_equal(gt_unique, unique))
+
 
 if __name__ == "__main__":
     unittest.main()

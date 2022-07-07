@@ -494,3 +494,60 @@ def merge_seg(output, vol, bbox, merge_func):
     slices = tuple(slice(bbox[2 * i + 1], bbox[2 * i + 2] + 1) for i in range(3))
     output[slices] = merge_func(output[slices], vol)
     return output
+
+
+def _chunk_unique(vol, return_inverse, block_info):
+    output = np.unique(vol, return_inverse=return_inverse)
+
+    if not return_inverse:
+        return [output]
+
+    return [
+        output[0],
+        output[1].reshape(vol.shape),
+    ]
+
+
+@dask.delayed
+def _aggregate_unique(unique):
+    return np.unique(np.concatenate(unique.flatten()))
+
+
+def _chunk_unique_remap(unique, final_unique, block_info):
+    unique = unique.item()
+    return [np.searchsorted(final_unique, unique)]
+
+
+def chunk_unique(vol, return_inverse):
+    # simple scalar unique (no axis parameter in unique)
+    # return_inverse: True or False
+    # NOTE: will need to rewrite if number of unique values exceed memory
+    output = chunk(
+        _chunk_unique,
+        [vol],
+        output_dataset_dtypes=[object, UINT_DTYPE] if return_inverse else [object],
+        return_inverse=return_inverse,
+    )
+
+    if not return_inverse:
+        unique = output
+    else:
+        unique, idx = output
+
+    final_unique = da.from_delayed(
+        _aggregate_unique(unique), shape=[np.nan], dtype=unique.dtype
+    )
+
+    if not return_inverse:
+        return final_unique
+
+    remapping = chunk(
+        _chunk_unique_remap,
+        [unique],
+        output_dataset_dtypes=[object],
+        final_unique=final_unique,
+    )
+
+    inverse = chunk_remap(idx, remapping)
+
+    return final_unique, inverse
