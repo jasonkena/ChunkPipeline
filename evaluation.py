@@ -2,6 +2,7 @@
 import numpy as np
 import os
 import sys
+import glob
 import h5py
 
 from numba import jit
@@ -14,6 +15,7 @@ from dask.diagnostics import ProgressBar
 
 import chunk
 from utils import dask_read_array, dask_write_array
+from settings import *
 
 matching_criteria = dict()
 
@@ -269,7 +271,7 @@ def matching(
                     matched_scores=(),
                     matched_tps=(),
                 )
-        return namedtuple("Matching", stats_dict.keys())(*stats_dict.values())
+        return stats_dict
 
     if np.isscalar(thresh):
         thresh = [thresh]
@@ -279,7 +281,7 @@ def matching(
     return result if len(result) > 1 else result[0]
 
 
-def main(base_path, id, h5):
+def save_scores(base_path, id, h5):
     if h5 == "inference":
         h5 = f"inferred_{id}.h5"
     elif h5 == "baseline":
@@ -308,6 +310,35 @@ def main(base_path, id, h5):
     file.close()
 
 
+@dask.delayed
+def get_stats(file, thresh):
+    file = h5py.File(file)
+    scores = file.get("scores")[:]
+    map_rev_true = file.get("map_rev_true")[:]
+    map_rev_pred = file.get("map_rev_pred")[:]
+    criterion = file.attrs["criterion"]
+
+    result = matching(scores, map_rev_true, map_rev_pred, criterion, thresh)
+    if np.isscalar(thresh):
+        result = [result]
+
+    return dask.compute(*result)
+
+
+def save_stats(base_path):
+    files = sorted(glob.glob(os.path.join(base_path, "scores", "scores_*.h5")))
+    stats = [get_stats(file, THRESHOLD) for file in files]
+    stats = dask.compute(*stats)
+
+    result = {file: stats[i] for i, file in enumerate(files)}
+    np.save(os.path.join(base_path, "stats.npy"), result)
+
+
 if __name__ == "__main__":
     with ProgressBar():
-        main(sys.argv[1], int(sys.argv[2]), sys.argv[3])
+        if len(sys.argv) == 2:
+            save_stats(sys.argv[1])
+        elif len(sys.argv) == 4:
+            save_scores(sys.argv[1], int(sys.argv[2]), sys.argv[3])
+        else:
+            raise ValueError("invalid number of arguments")

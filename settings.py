@@ -21,6 +21,9 @@ PC_PRED_THRESHOLD = 0.5
 # merging hyperparameters
 NUM_DENDRITES = 50
 
+# evaluation hyperparameters
+THRESHOLD = (np.arange(1, 10) / 10).tolist()
+
 # SLURM cluster config
 SLURM_PROJECT_NAME = "dendrite"
 SLURM_PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100"
