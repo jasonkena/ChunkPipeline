@@ -21,6 +21,24 @@ PC_PRED_THRESHOLD = 0.5
 # merging hyperparameters
 NUM_DENDRITES = 50
 
+# skeletonization hyperparameters
+
+KIMI_PARAMS = {
+    "teasar_params": {
+        "scale": 1.5,
+        "const": 300,
+        "soma_detection_threshold": 1500,
+        "soma_acceptance_threshold": 3500,
+        "soma_invalidation_scale": 2,
+        "soma_invalidation_const": 300,
+        "pdrf_scale": 100000,
+        "pdrf_exponent": 4,
+        "max_paths": None,
+    },
+    "dust_threshold": 1000,
+    "anisotropy": list(ANISOTROPY),
+}
+
 # evaluation hyperparameters
 THRESHOLD = (np.arange(1, 10) / 10).tolist()
 

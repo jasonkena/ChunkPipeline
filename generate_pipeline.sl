@@ -31,6 +31,7 @@ mkdir -p pred
 mkdir -p inference
 mkdir -p baseline
 mkdir -p scores
+mkdir -p skels
 
 cp *.h5 $TMPDIR
 cp *.npy $TMPDIR
@@ -56,6 +57,15 @@ else
     cp $TMPDIR/gt_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/extracted/
 endif
 echo gt_extract_seg finished
+
+if ( -f "$BASE_PATH/skels/skel_$SLURM_ARRAY_TASK_ID.h5" ) then
+    echo Skeleton already exists
+    cp $BASE_PATH/skels/skel_$SLURM_ARRAY_TASK_ID.h5 $TMPDIR
+else
+    python3 generate_skeleton.py $TMPDIR $SLURM_ARRAY_TASK_ID
+    cp $TMPDIR/skel_$SLURM_ARRAY_TASK_ID.h5 $BASE_PATH/skels/
+endif
+echo generate_skeleton finished
 
 if ( -f "$BASE_PATH/results/sparse_$SLURM_ARRAY_TASK_ID.npy" && -f "$BASE_PATH/results/dense_$SLURM_ARRAY_TASK_ID.npy" ) then
     echo Points already exist
