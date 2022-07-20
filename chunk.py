@@ -551,3 +551,18 @@ def chunk_unique(vol, return_inverse):
     inverse = chunk_remap(idx, remapping)
 
     return final_unique, inverse
+
+
+def _chunk_max_pool(vol, block_info):
+    return [np.max(vol)]
+
+
+def chunk_downsample(vol, chunk_width, anisotropy):
+    # chunk_width is in nanometers
+    chunk_size = [math.ceil(chunk_width / anisotropy[i]) for i in range(3)]
+    vol = da.rechunk(vol, chunks=tuple(chunk_size))
+
+    downsampled = chunk(_chunk_max_pool, [vol], [object])
+    # an approximation of chunk_width
+    real_anisotropy = [chunk_size[i] * anisotropy[i] for i in range(3)]
+    return downsampled, real_anisotropy

@@ -15,10 +15,6 @@ import dask.array as da
 from dask.diagnostics import ProgressBar
 
 
-def _chunk_max_pool(vol, block_info):
-    return [np.max(vol)]
-
-
 @dask.delayed
 def _aggregate_dt(vol, real_anisotropy):
     dt = sphere._get_dt(
@@ -28,14 +24,7 @@ def _aggregate_dt(vol, real_anisotropy):
 
 
 def max_dt(vol, chunk_width, anisotropy):
-    # chunk_width is in nanometers
-    chunk_size = [math.ceil(chunk_width / anisotropy[i]) for i in range(3)]
-    vol = da.rechunk(vol, chunks=tuple(chunk_size))
-
-    downsampled = chunk.chunk(_chunk_max_pool, [vol], [object])
-
-    # an approximation of chunk_width
-    real_anisotropy = [chunk_size[i] * anisotropy[i] for i in range(3)]
+    downsampled, real_anisotropy = chunk.chunk_downsample(vol, chunk_width, anisotropy)
     max_dt_val = _aggregate_dt(downsampled, real_anisotropy)
 
     return max_dt_val

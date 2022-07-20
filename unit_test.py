@@ -273,7 +273,7 @@ class ChunkTest(unittest.TestCase):
         )[0, 0]
 
         downsampled = chunk.chunk(
-            inference._chunk_max_pool,
+            chunk._chunk_max_pool,
             [da.from_array(input, chunks=chunk_size)],
             [object],
         ).compute()

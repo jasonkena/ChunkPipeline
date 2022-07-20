@@ -6,7 +6,7 @@ INT_DTYPE = np.uint16
 # data storage will be at chunk size CHUNK_SIZE[i] // 2
 # CHUNK_SIZE = "auto" # let dask choose chunk_size
 CHUNK_SIZE = (500, 500, 500)
-ANISOTROPY = (30, 6, 6)
+ANISOTROPY = (30, 8, 8)
 
 # baseline related hyperparameters
 CONNECTIVITY = 26
@@ -23,6 +23,7 @@ NUM_DENDRITES = 50
 
 # skeletonization hyperparameters
 
+KIMI_DOWNSAMPLE_RADIUS = 30
 KIMI_PARAMS = {
     "teasar_params": {
         "scale": 1.5,
@@ -36,7 +37,6 @@ KIMI_PARAMS = {
         "max_paths": None,
     },
     "dust_threshold": 1000,
-    "anisotropy": list(ANISOTROPY),
 }
 
 # evaluation hyperparameters
