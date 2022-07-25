@@ -5,8 +5,7 @@ import h5py
 import numpy as np
 import kimimaro
 
-import torch
-import torch.nn.functional as F
+from skimage.measure import block_reduce
 
 from skeleton import skel
 from settings import *
@@ -19,19 +18,12 @@ def main(base_path, id):
     row = input.get("row")[:]
     # read into memory, may need to refactor if out of memory
     input = input.get("main")[:]
-    chunk_size = [math.ceil(KIMI_DOWNSAMPLE_RADIUS / ANISOTROPY[i]) for i in range(3)]
+    chunk_size = tuple(
+        [math.ceil(KIMI_DOWNSAMPLE_RADIUS / ANISOTROPY[i]) for i in range(3)]
+    )
     real_anisotropy = [chunk_size[i] * ANISOTROPY[i] for i in range(3)]
 
-    downsampled = (
-        F.max_pool3d(
-            torch.from_numpy(input).float().unsqueeze(0),
-            kernel_size=chunk_size,
-            stride=chunk_size,
-        )
-        .squeeze(0)
-        .numpy()
-        .astype(input.dtype)
-    )
+    downsampled = block_reduce(input, block_size=chunk_size, func=np.max)
 
     seg_skeleton = kimimaro.skeletonize(
         downsampled, anisotropy=real_anisotropy, **KIMI_PARAMS

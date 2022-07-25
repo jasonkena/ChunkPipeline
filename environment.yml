@@ -10,6 +10,7 @@ dependencies:
   - numba
   - dask
   - dask-jobqueue
+  - scikit-image
   - pip
   - pip:
     - opensimplex
