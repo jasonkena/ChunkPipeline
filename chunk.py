@@ -35,6 +35,10 @@ def index_ragged(vol, idx, object_dtype=False):
 
 def partial_func(func):
     def inner_partial_func(*args, block_info=None, **kwargs):
+        if "_dtype" in kwargs:
+            kwargs = kwargs.copy()
+            kwargs["dtype"] = kwargs.pop("_dtype")
+
         temp = func(*args, **kwargs, block_info=block_info)
         result = object_array(temp)
         result = result.reshape(
@@ -112,6 +116,11 @@ def chunk(
             for x in input_datasets
         ]
     new_chunks = input_datasets[0].chunks
+
+    if "dtype" in kwargs:
+        kwargs = kwargs.copy()
+        # _dtype will be passed back to func as dtype through partial_func
+        kwargs["_dtype"] = kwargs.pop("dtype")
 
     # [z, y, x, num_outputs]
     output = da.map_blocks(
