@@ -1,7 +1,7 @@
 import numpy as np
 
 UINT_DTYPE = np.uint16
-INT_DTYPE = np.uint16
+INT_DTYPE = np.int16
 
 # data storage will be at chunk size CHUNK_SIZE[i] // 2
 # CHUNK_SIZE = "auto" # let dask choose chunk_size

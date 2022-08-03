@@ -173,7 +173,7 @@ def _chunk_bbox(vol, block_info):
 
 
 @dask.delayed
-def _bbox_aggregate(bboxes):
+def _bbox_aggregate(bboxes, dtype):
     bboxes = np.concatenate(bboxes.reshape(-1).tolist(), axis=0)
     bboxes = bboxes[np.argsort(bboxes[:, 0])]
     assert not np.any(bboxes[:, 0] == 0)
@@ -188,10 +188,10 @@ def _bbox_aggregate(bboxes):
             result[-1][j] = np.min(bboxes[idx[i] : idx[i + 1], j])
         for j in [2, 4, 6]:
             result[-1][j] = np.max(bboxes[idx[i] : idx[i + 1], j])
-    return np.array(result, dtype=UINT_DTYPE)
+    return np.array(result, dtype=dtype)
 
 
-def chunk_bbox(vol):
+def chunk_bbox(vol, dtype=UINT_DTYPE):
     # calculate bbox in chunks
     # vol: h5 dataset used as input
     # chunk_size: [size_z, size_y, size_x]
@@ -201,7 +201,7 @@ def chunk_bbox(vol):
     # [z,y,x], then [seg id, zmin, zmax, etc]
     bboxes = chunk(_chunk_bbox, [vol], output_dataset_dtypes=[object])
     bboxes = da.from_delayed(
-        _bbox_aggregate(bboxes), shape=(np.nan, 7), dtype=UINT_DTYPE
+        _bbox_aggregate(bboxes, dtype), shape=(np.nan, 7), dtype=dtype
     )
     return bboxes
 
@@ -287,7 +287,7 @@ def chunk_remap(vol, remapping):
     )
 
 
-def _chunk_half_extend_cc3d(vol, connectivity, block_info):
+def _chunk_half_extend_cc3d(vol, connectivity, dtype, block_info):
     chunk_idx = block_info[0]["chunk-location"]
     num_chunks = block_info[0]["num-chunks"]
 
@@ -314,7 +314,7 @@ def _chunk_half_extend_cc3d(vol, connectivity, block_info):
     )
     neighbors = stacked[mask]
 
-    return [connected_components.astype(UINT_DTYPE), neighbors.astype(UINT_DTYPE)]
+    return [connected_components.astype(dtype), neighbors.astype(dtype)]
 
 
 @dask.delayed
@@ -399,7 +399,7 @@ def compute_remapping(uf_add, uf_union, partial_statistics, vol_shape, k):
     return remapping, voxel_counts
 
 
-def chunk_cc3d(vol, connectivity, k):
+def chunk_cc3d(vol, connectivity, k, dtype=UINT_DTYPE):
     # perform chunked cc3d calculations
     # vol: dataset used as input
     # k: either int or False
@@ -412,13 +412,14 @@ def chunk_cc3d(vol, connectivity, k):
     partial_cc3d, neighbors = chunk(
         _chunk_half_extend_cc3d,
         [vol],
-        [UINT_DTYPE, object],
+        [dtype, object],
         pad="half_extend",
         connectivity=connectivity,
+        dtype=dtype,
     )
 
     partial_statistics = chunk(
-        lambda vol, block_info: [cc3d.statistics(vol.astype(UINT_DTYPE))],
+        lambda vol, block_info: [cc3d.statistics(vol.astype(dtype))],
         [partial_cc3d],
         [object],
     )
@@ -441,7 +442,7 @@ def chunk_cc3d(vol, connectivity, k):
     return partial_cc3d, voxel_counts
 
 
-def _chunk_nonzero(vol, extra=None, block_info=None):
+def _chunk_nonzero(vol, extra=None, dtype=None, block_info=None):
     # kwargs must contain func, and it must return 2 things: binary mask and another (array or None)
     # returns indices where vol is true
     # [3, N]
@@ -454,7 +455,7 @@ def _chunk_nonzero(vol, extra=None, block_info=None):
     if extra is not None:
         idx = np.concatenate([idx, extra.reshape(-1, 1)], axis=1)
 
-    return [idx.astype(UINT_DTYPE)]
+    return [idx.astype(dtype)]
 
 
 @dask.delayed
@@ -464,7 +465,7 @@ def _aggregate_nonzero(idx):
     return np.unique(idx, axis=0)
 
 
-def chunk_nonzero(vol, extra=None):
+def chunk_nonzero(vol, extra=None, dtype=UINT_DTYPE):
     # TODO: implement chunked saving instead of aggregating all indices
     inputs = [vol, extra] if extra is not None else [vol]
     result = chunk(
@@ -472,10 +473,11 @@ def chunk_nonzero(vol, extra=None):
         inputs,
         [object],
         align_idx=([0, 1] if extra is not None else None),
+        dtype=dtype,
     )
     result = _aggregate_nonzero(result)
     result = da.from_delayed(
-        result, shape=[np.nan, 3 + (extra is not None)], dtype=UINT_DTYPE
+        result, shape=[np.nan, 3 + (extra is not None)], dtype=dtype
     )
     return result
 
@@ -518,14 +520,14 @@ def _chunk_unique_remap(unique, final_unique, block_info):
     return [np.searchsorted(final_unique, unique)]
 
 
-def chunk_unique(vol, return_inverse):
+def chunk_unique(vol, return_inverse, dtype=UINT_DTYPE):
     # simple scalar unique (no axis parameter in unique)
     # return_inverse: True or False
     # NOTE: will need to rewrite if number of unique values exceed memory
     output = chunk(
         _chunk_unique,
         [vol],
-        output_dataset_dtypes=[object, UINT_DTYPE] if return_inverse else [object],
+        output_dataset_dtypes=[object, dtype] if return_inverse else [object],
         return_inverse=return_inverse,
     )
 
