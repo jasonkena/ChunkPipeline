@@ -278,7 +278,7 @@ def _chunk_cc3d_neighbors(partial_cc3d, partial_statistics, neighbors, block_inf
     pairs = [np.stack((i[:-1], i[1:]), axis=-1) for i in splitted]
     # [num_pairs, idx, 2]
     if len(pairs):
-        uf_union = np.concatenate(pairs, axis=0)
+        uf_union = np.unique(np.concatenate(pairs, axis=0), axis=0)
     else:
         uf_union = np.array((), dtype=neighbors.dtype).reshape((0, 4, 2))
 
