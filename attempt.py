@@ -21,6 +21,7 @@ from settings import *
 import chunk
 from utils import dask_write_array
 
+from dask_jobqueue import SLURMCluster
 from dask_memusage import install
 
 
@@ -65,60 +66,81 @@ def chunk_grey_erosion(vol, structure):
     )
 
 
-def _fill_and_remove_dust(vol):
-    # big hack, since rechunking is expensive and list comprehensions are slow
-    vol = nd.binary_fill_holes(vol)
-    vol = cc3d.dust(vol, threshold=100, connectivity=26)
-    return vol
-
-def partial_fake_slice(func):
-    # because rechunking is very expensive
-    def inner_partial_fake_slice(vol):
-        shape = vol.shape
-        # N, H+1, W
-        vol = np.pad(vol, [(0, 0), (0, 1), (0, 0)], mode="constant")
-        vol = list(vol)
-        # N*(H+1), W
-        vol = np.concatenate(vol, axis=0)
-        vol = func(vol)
-        # N, H+1, W
-        vol = np.stack(np.split(vol, shape[0], axis=0), axis=0)
-        # N, H, W
-        vol = vol[:, :-1, :]
-
-        return vol
-    return inner_partial_fake_slice
-
-    # # big hack, since rechunking is expensive and list comprehensions are slow
-    # result = np.zeros([vol.shape[0]*2, vol.shape[1], vol.shape[2]], dtype=vol.dtype)
-    # result[::2, :, :] = vol
+#
+#
+# def _fill_and_remove_dust(vol):
+#     # big hack, since rechunking is expensive and list comprehensions are slow
+#     vol = nd.binary_fill_holes(vol)
+#     vol = cc3d.dust(vol, threshold=100, connectivity=26)
+#     return vol
+#
 # def partial_fake_slice(func):
 #     # because rechunking is very expensive
 #     def inner_partial_fake_slice(vol):
-#         return np.stack([func(x) for x in vol], axis=0)
+#         shape = vol.shape
+#         # N, H+1, W
+#         vol = np.pad(vol, [(0, 0), (0, 1), (0, 0)], mode="constant")
+#         vol = list(vol)
+#         # N*(H+1), W
+#         vol = np.concatenate(vol, axis=0)
+#         vol = func(vol)
+#         # N, H+1, W
+#         vol = np.stack(np.split(vol, shape[0], axis=0), axis=0)
+#         # N, H, W
+#         vol = vol[:, :-1, :]
+#
+#         return vol
 #     return inner_partial_fake_slice
+#
+#     # # big hack, since rechunking is expensive and list comprehensions are slow
+#     # result = np.zeros([vol.shape[0]*2, vol.shape[1], vol.shape[2]], dtype=vol.dtype)
+#     # result[::2, :, :] = vol
+# # def partial_fake_slice(func):
+# #     # because rechunking is very expensive
+# #     def inner_partial_fake_slice(vol):
+# #         return np.stack([func(x) for x in vol], axis=0)
+# #     return inner_partial_fake_slice
+#
+# def fill_and_remove_dust(vol):
+#     return vol.map_blocks(partial_fake_slice(_fill_and_remove_dust), dtype=bool, name="fill_and_remove_dust")
+#
+def _fill_and_remove_dust(vol):
+    vol = nd.binary_fill_holes(vol[0])[np.newaxis, :, :]
+    vol = cc3d.dust(vol, threshold=100, connectivity=26)
+    return vol
+
 
 def fill_and_remove_dust(vol):
-    return vol.map_blocks(partial_fake_slice(_fill_and_remove_dust), dtype=bool, token="fill_and_remove_dust")
+    original_chunks = vol.chunks
+    vol = da.rechunk(vol, chunks=(1, -1, -1))
+    vol = vol.map_blocks(_fill_and_remove_dust, dtype=bool)
+    vol = da.rechunk(vol, original_chunks)
+    return vol
 
 
 def main():
     h5 = h5py.File(FILE, "w")
     vol = da.from_array(chunk.object_array(files), chunks=1)
     vol = da.map_blocks(
-        lambda x: chunk.object_array([read_png(x[0])]), vol, dtype=object, token="read_png"
+        lambda x: chunk.object_array([read_png(x[0])]),
+        vol,
+        dtype=object,
+        name="read_png",
     )
-    is_valid = vol.map_blocks(lambda x: x[0] is not None, dtype=bool, token="is_valid").compute()
+    is_valid = vol.map_blocks(
+        lambda x: x[0] is not None, dtype=bool, name="is_valid"
+    ).compute()
 
     idx = fill_blanks(is_valid)
-    vol = vol[idx]
+    # without rechunk, chunksize won't be one
+    vol = da.rechunk(vol[idx], chunks=1)
     vol = da.map_blocks(
         lambda x: x[0][np.newaxis],
         vol,
         dtype=np.uint8,
         new_axis=[1, 2],
         chunks=[1] + list(SHAPE),
-        token="new_axis",
+        name="new_axis",
     )
 
     # [N, H, W]
@@ -141,17 +163,43 @@ def main():
     print("done")
 
 
-
 FILE = f"/mmfs1/data/adhinart/dendrite/r0.h5"
-CHUNK_SIZE = (1600, 1600, 128)
+# CHUNK_SIZE = (1600, 1600, 128)
 
 if __name__ == "__main__":
     files = sorted(glob.glob(os.path.join("R0", "im_64nm", "*.png")))
     SHAPE = cv2.imread(files[0], cv2.IMREAD_GRAYSCALE).shape
-    cluster = LocalCluster(
-        n_workers=6, memory_limit="20GB", local_directory=SLURM_LOCAL_DIRECTORY
-    )
-    install(cluster.scheduler, "/mmfs1/data/adhinart/dendrite/memusage.csv")
-    client = Client(cluster)
-    print(cluster.dashboard_link)
-    main()
+    # cluster = LocalCluster(
+    #     n_workers=6, memory_limit="20GB", local_directory=SLURM_LOCAL_DIRECTORY
+    # )
+    # client = Client(cluster)
+    dask.config.set({"distributed.comm.timeouts.connect": "300s"})
+    dask.config.set({"distributed.comm.retry.count": 3})
+    # dask.config.set({'distributed.scheduler.idle-timeout' : "5 minutes"})
+    with SLURMCluster(
+        local_directory=SLURM_LOCAL_DIRECTORY,
+        job_name=SLURM_PROJECT_NAME,
+        queue=SLURM_PARTITIONS,
+        cores=SLURM_CORES_PER_JOB,
+        memory=SLURM_MEMORY_PER_JOB,
+        scheduler_options={"dashboard_address": f":{SLURM_DASHBOARD_PORT}"},
+        walltime=SLURM_WALLTIME,
+        processes=SLURM_NUM_PROCESSES_PER_JOB,
+        interface="ib0",
+    ) as cluster, Client(cluster) as client:
+
+        print(cluster.dashboard_link)
+        # cluster.adapt(
+        #     minimum_jobs=SLURM_MIN_JOBS,
+        #     maximum_jobs=SLURM_MAX_JOBS,
+        #     interval=SLURM_SCALE_INTERVAL,
+        #     wait_count=SLURM_WAIT_COUNT,
+        #     target_duration=SLURM_TARGET_DURATION,
+        # )
+
+        cluster.scale(jobs=SLURM_MIN_JOBS)
+
+        install(cluster.scheduler, "/mmfs1/data/adhinart/dendrite/memusage.csv")
+        main()
+
+    __import__("pdb").set_trace()

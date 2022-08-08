@@ -58,7 +58,8 @@ def chunk(
     pad_width=(1, 1, 1),
     trim_output=True,
     align_idx=None,
-    **kwargs
+    name=None,
+    **kwargs,
 ):
     # func
     """
@@ -78,6 +79,8 @@ def chunk(
     # NOTE: func should not overwrite input; just pass same dataset as output
 
     assert pad in ["extend", "half_extend", False]
+    if name is None:
+        name = func.__name__
     # assert len(set([i.shape for i in input_datasets])) == 1
     if len(output_dataset_dtypes):
         assert len(input_datasets) > 0
@@ -130,7 +133,8 @@ def chunk(
         chunks=[*(1 for _ in range(len(shape))), len(output_dataset_dtypes)],
         meta=np.empty(1, dtype=object),
         new_axis=len(shape),
-        **kwargs
+        name=f"chunk_output_{name}",
+        **kwargs,
     )
 
     final = []
@@ -153,6 +157,7 @@ def chunk(
             drop_axis=len(shape),
             idx=idx,
             ddtype=dtype,
+            name=f"chunk_idx_{name}",
         )
 
         if dtype != object:
@@ -293,6 +298,7 @@ def chunk_remap(vol, remapping):
         ],
         [vol, remapping],
         [vol.dtype],
+        name="remap",
     )
 
 
@@ -431,6 +437,7 @@ def chunk_cc3d(vol, connectivity, k, dtype=UINT_DTYPE):
         lambda vol, block_info: [cc3d.statistics(vol.astype(dtype))],
         [partial_cc3d],
         [object],
+        name="partial_statistics",
     )
 
     uf_add, uf_union = chunk(

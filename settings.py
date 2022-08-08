@@ -6,7 +6,10 @@ INT_DTYPE = np.int16
 # data storage will be at chunk size CHUNK_SIZE[i] // 2
 # CHUNK_SIZE = "auto" # let dask choose chunk_size
 CHUNK_SIZE = (500, 500, 500)
-ANISOTROPY = (30, 8, 8)
+# for den_seg
+ANISOTROPY = (30, 6, 6)
+# for human and mouse
+# ANISOTROPY = (30, 8, 8)
 
 # baseline related hyperparameters
 CONNECTIVITY = 26
@@ -45,10 +48,12 @@ THRESHOLD = (np.arange(1, 10) / 10).tolist()
 # SLURM cluster config
 SLURM_PROJECT_NAME = "dendrite"
 SLURM_PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100"
+SLURM_NUM_PROCESSES_PER_JOB = 1
 SLURM_CORES_PER_JOB = 48
-SLURM_MEMORY_PER_JOB = "30GB"
+# in GB
+SLURM_MEMORY_PER_JOB = "140GB"
 SLURM_WALLTIME = "120:00:00"
-SLURM_MIN_JOBS = 5
+SLURM_MIN_JOBS = 20
 SLURM_MAX_JOBS = 50
 SLURM_LOCAL_DIRECTORY = "/scratch/adhinart"
 SLURM_SCALE_INTERVAL = "10s"  # how long until new scaling
