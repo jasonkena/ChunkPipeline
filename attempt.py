@@ -53,8 +53,8 @@ def _chunk_grey_erosion(vol, structure, block_info=None):
 
 
 def chunk_grey_erosion(vol, structure):
-    assert [i % 2 == 1 for i in structure]
-    pad_width = [(x - 1) // 2 for x in structure]
+    assert [i % 2 == 1 for i in structure.shape]
+    pad_width = [(x - 1) // 2 for x in structure.shape]
 
     return chunk.chunk(
         _chunk_grey_erosion,
@@ -147,7 +147,7 @@ def main():
     # vol = dask.compute(*vol)
     original = vol
     vol = da.rechunk(vol, chunks=CHUNK_SIZE)
-    eroded = chunk_grey_erosion(vol, np.ones([5, 1, 1]))
+    eroded = chunk_grey_erosion(vol, np.ones([3, 3, 3]))
 
     thresholded = eroded > (da.mean(eroded) + da.std(eroded))
     filtered = fill_and_remove_dust(thresholded)
@@ -155,10 +155,15 @@ def main():
     cc, voxel_counts = chunk.chunk_cc3d(filtered, CONNECTIVITY, False, dtype=np.uint16)
 
     original, cc, voxel_counts = dask.compute(original, cc, voxel_counts)
+    # h5.create_dataset(
+    #     "original", data=original, chunks=(128, 1600, 1600), compression="gzip"
+    # )
     h5.create_dataset(
-        "original", data=original, chunks=(128, 1600, 1600), compression="gzip"
+        "seg",
+        data=cc,
+        chunks=(min(original.shape[0], 128), original.shape[1], original.shape[1]),
+        compression="gzip",
     )
-    h5.create_dataset("seg", data=cc, chunks=(128, 1600, 1600), compression="gzip")
     h5.create_dataset("voxel_counts", data=voxel_counts)
     print("done")
 
@@ -167,21 +172,23 @@ FILE = f"/mmfs1/data/adhinart/dendrite/r0.h5"
 # CHUNK_SIZE = (1600, 1600, 128)
 
 if __name__ == "__main__":
-    files = sorted(glob.glob(os.path.join("R0", "im_64nm", "*.png")))
+    files = sorted(glob.glob("/mmfs1/data/bccv/dataset/R0/im_64nm/*.png"))
+    # since first file has irregular shape
+    files[0] = files[1]
     SHAPE = cv2.imread(files[0], cv2.IMREAD_GRAYSCALE).shape
     # cluster = LocalCluster(
     #     n_workers=6, memory_limit="20GB", local_directory=SLURM_LOCAL_DIRECTORY
     # )
     # client = Client(cluster)
     dask.config.set({"distributed.comm.timeouts.connect": "300s"})
-    dask.config.set({"distributed.comm.retry.count": 3})
+    # dask.config.set({"distributed.comm.retry.count": 3})
     # dask.config.set({'distributed.scheduler.idle-timeout' : "5 minutes"})
     with SLURMCluster(
         local_directory=SLURM_LOCAL_DIRECTORY,
         job_name=SLURM_PROJECT_NAME,
         queue=SLURM_PARTITIONS,
         cores=SLURM_CORES_PER_JOB,
-        memory=SLURM_MEMORY_PER_JOB,
+        memory=f"{SLURM_MEMORY_PER_JOB}GiB",
         scheduler_options={"dashboard_address": f":{SLURM_DASHBOARD_PORT}"},
         walltime=SLURM_WALLTIME,
         processes=SLURM_NUM_PROCESSES_PER_JOB,
@@ -189,14 +196,7 @@ if __name__ == "__main__":
     ) as cluster, Client(cluster) as client:
 
         print(cluster.dashboard_link)
-        # cluster.adapt(
-        #     minimum_jobs=SLURM_MIN_JOBS,
-        #     maximum_jobs=SLURM_MAX_JOBS,
-        #     interval=SLURM_SCALE_INTERVAL,
-        #     wait_count=SLURM_WAIT_COUNT,
-        #     target_duration=SLURM_TARGET_DURATION,
-        # )
-
+        # this is number of threads, not jobs
         cluster.scale(jobs=SLURM_MIN_JOBS)
 
         install(cluster.scheduler, "/mmfs1/data/adhinart/dendrite/memusage.csv")

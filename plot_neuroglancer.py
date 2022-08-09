@@ -25,7 +25,7 @@ def ngLayer(data, res, oo=[0, 0, 0], tt="segmentation"):
 
 
 seg = h5py.File("r0.h5").get("seg")[:]
-im = h5py.File("r0.h5").get("original")[:]
+# im = h5py.File("r0.h5").get("original")[:]
 # seg = h5py.File("inferred_1.h5").get("main")[:].astype(np.uint8)
 # seg = h5py.File("/home/jason/Downloads/mouse.h5").get("seg")[:].astype(np.uint8)
 # seg = (
@@ -50,10 +50,12 @@ im = h5py.File("r0.h5").get("original")[:]
 #     gt = np.array(fl['main']).astype(np.uint8)
 
 with viewer.txn() as s:
-    s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
+    # s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
     # s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
     # s.layers.append(name='gt',layer=ngLayer(gt,res,tt='segmentation'))
     # s.layers.append(name="seg", layer=ngLayer(gt, res, tt="segmentation"))
     s.layers.append(name="seg", layer=ngLayer(seg, res, tt="segmentation"))
+    Dd = "precomputed://https://rhoana.rc.fas.harvard.edu/ng/R0/im_64nm/"
+    s.layers["image"] = neuroglancer.ImageLayer(source=Dd)
 
 print(viewer)
