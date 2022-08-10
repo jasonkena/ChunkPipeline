@@ -1,13 +1,22 @@
 import numpy as np
 import math
 
+# __ to delimit hierarchy, read config.py
+TASK = None  # den_seg/mouse/human/etc. this als
+
+# {TASK} will be filled in at runtime
+_base_path = "/mmfs1/data/adhinart/dendrite/data"
+MISC__MEMUSAGE_PATH = _base_path + "/{TASK}/memusage.csv"
+MISC__ZARR_PATH = _base_path + "/{TASK}/zarr"
+
+
 GENERAL__UINT_DTYPE = np.uint16
 # INT_DTYPE = np.int16
 
 # data storage will be at chunk size CHUNK_SIZE[i] // 2
 # CHUNK_SIZE = "auto" # let dask choose chunk_size
 GENERAL__CHUNK_SIZE = (512, 512, 512)
-GENERAL__ANISOTROPY = None # depends on the dataset, must be specified in config file
+GENERAL__ANISOTROPY = None  # depends on the dataset, must be specified in config file
 # for den_seg
 # ANISOTROPY = (30, 6, 6)
 # for human and mouse
@@ -47,8 +56,22 @@ KIMI__PARAMS = {
 # evaluation hyperparameters
 EVAL__THRESHOLD = (np.arange(1, 10) / 10).tolist()
 
+# coarse blood segmentation hyperparameters
+COARSE_ORIGINAL__IMAGE_PATH = (
+    "/mmfs1/data/bccv/dataset/R0/im_64nm/*.png"  # glob pattern
+)
+COARSE_ORIGINAL__APPLY_CLAHE = True
+COARSE_ORIGINAL__CLIP_LIMIT = 2.0
+COARSE_ORIGINAL__TILE_GRID_SIZE = (8, 8)
+
+COARSE__EROSION_STRUCTURE = np.ones([3, 3, 3], dtype=bool).tolist()
+COARSE__DUST_THRESHOLD = 100
+COARSE__DUST_CONNECTIVITY = 6
+COARSE__CONNECTIVITY = BASELINE__CONNECTIVITY  # for connected components
+COARSE__THRESHOLD_Z_SCORE = 1.0  # require score to be above mean + z_score * std
+
 # SLURM cluster config
-SLURM__PROJECT_NAME = "dendrite"
+SLURM__PROJECT_NAME = "{TASK}"
 SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100"
 SLURM__CORES_PER_JOB = 48
 
@@ -67,8 +90,3 @@ SLURM__MIN_JOBS = 20
 SLURM__LOCAL_DIRECTORY = "/scratch/adhinart"
 SLURM__DASHBOARD_PORT = 8888
 SLURM__INTERFACE = "ib0"
-
-MISC__MEMUSAGE_PATH = "/mmfs1/data/adhinart/dendrite/memusage.csv"
-MISC__ZARR_PATH = "/mmfs1/data/adhinart/dendrite/zarr"
-MISC__CONFIG_PATH = "/mmfs1/data/adhinart/dendrite/config"
-

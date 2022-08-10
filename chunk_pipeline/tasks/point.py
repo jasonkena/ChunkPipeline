@@ -30,6 +30,7 @@ def main(base_path, id):
 
     if not os.path.exists(sparse_file):
         boundary = sphere.get_boundary(all)
+        # this is probably what crashed
         sparse_output = chunk.chunk_nonzero(boundary, extra=new_spine)
         sparse_output = sparse_output + np.array([row[1], row[3], row[5], 0]).reshape(
             1, -1

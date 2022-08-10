@@ -1,9 +1,6 @@
 import numpy as np
 import dask
 import dask.array as da
-import h5py
-
-from settings import *
 
 
 def pad_vol(vol, kernel_shape):
@@ -35,18 +32,8 @@ def extend_bbox(bbox, max_shape):
     return bbox
 
 
-def dask_read_array(dataset):
-    return da.from_array(dataset, chunks=CHUNK_SIZE)
-
-
-def dask_write_array(filename, dataset_name, x):
-    # if list
-    if not isinstance(dataset_name, list):
-        dataset_name = [dataset_name]
-    if not isinstance(x, list):
-        x = [x]
-    dataset_name = [f"/{i}" for i in dataset_name]
-
-    # propagating chunk sizes
-    da.to_hdf5(filename, dict(zip(dataset_name, x)), compression="gzip")
-    return h5py.File(filename, "a")
+def object_array(input):
+    # properly create an object array
+    result = np.empty(len(input), dtype=object)
+    result[:] = input
+    return result

@@ -1,0 +1,1 @@
+from chunk_pipeline.tasks.coarse import task_generate_original, task_coarse_segment

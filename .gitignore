@@ -5,3 +5,4 @@ old/
 *.txt
 *.out
 dask-worker-space/
+__pycache__/
