@@ -1,5 +1,4 @@
 import os
-import warnings
 import argparse
 
 import chunk_pipeline
@@ -28,6 +27,3 @@ if __name__ == "__main__":
     pipeline = pipeline(cfg)
 
     pipeline.run()
-
-# ignore all warnings after execution
-# warnings.filterwarnings("ignore")

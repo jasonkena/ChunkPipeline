@@ -125,7 +125,7 @@ class Pipeline(ABC):
 
         return self._uid
 
-    def wrap(self, task):
+    def wrap(self, task, *args, **kwargs):
         # _attrs contains any attributes that are not _Dask_ arrays
         # numpy arrays are passed into _attrs
 
@@ -143,71 +143,16 @@ class Pipeline(ABC):
             ].copy()  # not using group.attrs since pickling is not supported
             for key in group.keys():
                 if key[0] != "_":
-                    result[key] = da.from_zarr(
-                        group[key], chunks=to_tuple(group[key].attrs["chunks"])
-                    )
-            return result
+                    chunks = result.pop(f"_{key}")
+                    result[key] = da.from_zarr(group[key], chunks=chunks)
+            return False, result
 
         else:
             if "_implicit_cfg" in group:
-                print(f"implicit_cfg has changed, clearing group {group.path}")
-            # overwrite old group
-            group = zarr.open_group(store=self.store, path=group.path, mode="w")
-            # group.clear()
-            # group.attrs.clear()  # here for good measure
-
-            def wrapper(*args, **kwargs):
-                result = task["func"](inner_cfg, *args, **kwargs)
-                assert isinstance(result, dict)
-
-                if not task["checkpoint"]:
-                    return result
-                else:
-                    # compute everything, preventing intermediate results from being wiped before all computes are executed
-                    result = dask.persist(result)[0]
-                    arrays = {}
-                    attrs = {}
-
-                    for key, value in result.items():
-                        if isinstance(value, da.Array):
-                            arrays[key] = value
-                        else:
-                            attrs[key] = value
-
-                    # NOTE: might need to rewrite for nonblocking writes
-                    stored = []
-                    for key, value in arrays.items():
-                        if any(np.isnan(value.shape)):
-                            # print(f"{key} has unknown shape, causing bottleneck") # not true anymore with dask.persist
-                            value.compute_chunk_sizes()  # in place operation
-                        stored.append(
-                            da.to_zarr(
-                                value,
-                                url=self.store.path,
-                                component=f"{group.path}/{key}",
-                                compute=False,
-                            )
-                        )
-                    attrs_values = dask.compute(stored, attrs.values())[1]
-
-                    for key, value in arrays.items():
-                        group[key].attrs["chunks"] = value.chunks
-
-                    attrs = dict(zip(attrs.keys(), attrs_values))
-                    group.create_dataset(
-                        "_attrs",
-                        data=object_array([attrs]),
-                        object_codec=numcodecs.Pickle(),
-                    )
-                    group.create_dataset(
-                        "_implicit_cfg",
-                        data=object_array([implicit_cfg]),
-                        object_codec=numcodecs.Pickle(),
-                    )
-
-                    return result
-
-            return wrapper
+                print(f"implicit_cfg has changed, will clear {group.path}")
+            result = task["func"](inner_cfg, *args, **kwargs)
+            assert isinstance(result, dict)
+            return task["checkpoint"], result
 
     @parallelize
     def compute(self, task_uids=None):
@@ -221,25 +166,68 @@ class Pipeline(ABC):
         )
         implicit_depends_on = sorted(list(set(implicit_depends_on)))
 
-        wrapped_results = {}
-        # wrapped_results = {i: self.wrap(self.tasks[i]) for i in implicit_depends_on}
+        results = {}
+        needs_checkpoint = []
+
         # compute everything else
         for i in implicit_depends_on:
-            # get either a dict or a function back
-            wrapped_results[i] = self.wrap(self.tasks[i])
-            if isinstance(wrapped_results[i], dict):
-                continue
             # reference results of previous tasks
-            dependencies = [wrapped_results[j] for j in self.tasks[i]["depends_on"]]
+            dependencies = [results[j] for j in self.tasks[i]["depends_on"]]
             assert all(isinstance(dependency, dict) for dependency in dependencies)
 
-            # if function, compute and save results
-            wrapped_results[i](*dependencies)
-            # reload using dask.from_zarr
-            wrapped_results[i] = self.wrap(self.tasks[i])
-            if not isinstance(wrapped_results[i], dict):
-                raise ValueError(f"Task {i} failed to save results")
+            # get either a dict or a function back
+            checkpoint, results[i] = self.wrap(self.tasks[i], *dependencies)
+            if checkpoint:
+                needs_checkpoint.append(i)
+
+        self.checkpoint(results, needs_checkpoint)
+
         print("Computed all tasks")
+        return results
+
+    def checkpoint(self, results, idx):
+        results = {i: results[i].copy() for i in idx}
+        pointer = dask.persist([results[i] for i in idx])
+        groups = [
+            zarr.open_group(store=self.store, path=self.tasks[i]["path"], mode="w")
+            for i in idx
+        ]
+        stored = []
+
+        # checkpoint each array
+        for i in idx:
+            for key in list(results[i].keys()):
+                value = results[i].pop(key)
+                if isinstance(value, da.Array):
+                    if np.isnan(value.shape).any():
+                        value.compute_chunk_sizes()
+                    # chunks will be saved in _attrs
+                    results[i][f"_{key}"] = value.chunks
+
+                    stored.append(
+                        da.to_zarr(
+                            value,
+                            url=self.store.path,
+                            component=f"{groups[i].path}/{key}",
+                            compute=False,
+                        )
+                    )
+        _, attrs = dask.compute(stored, results)
+        for i in idx:
+            groups[i].create_dataset(
+                "_attrs",
+                data=object_array([attrs[i]]),
+                object_codec=numcodecs.Pickle(),
+            )
+            implicit_cfg = {
+                group: self.cfg[group] for group in self.tasks[i]["implicit_cfg_groups"]
+            }
+            groups[i].create_dataset(
+                "_implicit_cfg",
+                data=object_array([implicit_cfg]),
+                object_codec=numcodecs.Pickle(),
+            )
+        return
 
     @abstractmethod
     def run(self):
