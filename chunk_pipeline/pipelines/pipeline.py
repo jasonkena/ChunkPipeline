@@ -1,13 +1,13 @@
-import sys
+import os
 import shutil
 from abc import ABC, abstractmethod
 
 import numpy as np
+import h5py
 
 import dask
 import dask.array as da
 from dask_jobqueue import SLURMCluster
-from dask_memusage import install
 from dask.distributed import Client, LocalCluster, wait
 
 from chunk_pipeline.utils import object_array
@@ -59,7 +59,6 @@ def parallelize(func):
                     )
                 )
                 cluster.scale(jobs=slurm["MIN_JOBS"])
-            install(cluster.scheduler, misc["MEMUSAGE_PATH"])
             return func(self, *args, **kwargs)
 
     return wrapper
@@ -185,22 +184,32 @@ class Pipeline(ABC):
         print("Computed all tasks")
         return results
 
-    def checkpoint(self, results, idx):
-        results = {i: results[i].copy() for i in idx}
-        pointer = dask.persist([results[i] for i in idx])
-        groups = [
-            zarr.open_group(store=self.store, path=self.tasks[i]["path"], mode="w")
+    def checkpoint(self, original_results, idx):
+        pointer = None
+        results = {i: original_results[i].copy() for i in idx}
+        groups = {
+            i: zarr.open_group(store=self.store, path=self.tasks[i]["path"], mode="w")
             for i in idx
-        ]
+        }
         stored = []
 
         # checkpoint each array
         for i in idx:
             for key in list(results[i].keys()):
-                value = results[i].pop(key)
-                if isinstance(value, da.Array):
+                if isinstance(results[i][key], da.Array):
+                    value = results[i].pop(key) # remove arrays from the graph to form an attr graph
                     if np.isnan(value.shape).any():
+                        if pointer is None:
+                            # prevent recalculation
+                            print("Persisting computations due to compute_chunk_sizes")
+                            pointer = dask.persist(original_results)
                         value.compute_chunk_sizes()
+                    if not da.core._check_regular_chunks(value.chunks):
+                        value = da.rechunk(
+                            value,
+                            chunks=(self.cfg["GENERAL"]["CHUNK_SIZE"][0],) * len(value.shape),
+                        )
+
                     # chunks will be saved in _attrs
                     results[i][f"_{key}"] = value.chunks
 
@@ -228,6 +237,33 @@ class Pipeline(ABC):
                 object_codec=numcodecs.Pickle(),
             )
         return
+
+    def export(self, path, sources, dests):
+        # path of h5 file to export to
+        # sources is path to zarr arrays (with special handling for _attrs)
+        # dests is path to h5 arrays
+
+        # fail if exists
+        assert len(sources) == len(dests)
+        file = h5py.File(os.path.join(self.store.path, path), "w-")
+        for i in range(len(sources)):
+            tokens = sources[i].split("/")
+            dir, name = "/".join(tokens[:-1]), tokens[-1]
+
+            group = zarr.open_group(store=self.store, path=dir, mode="r")
+            if name in group:
+                source = group[name]
+            else:
+                source = group["_attrs"][0][name]
+
+            tokens = dests[i].split("/")
+            dir, name = "/".join(tokens[:-1]), tokens[-1]
+            if dir == "":
+                dir = "/"
+            group = file.require_group(dir)
+
+            zarr.copy(source, group, name)
+        print("Exported finished")
 
     @abstractmethod
     def run(self):

@@ -1,44 +1,25 @@
-import numpy as np
-import h5py
-import os
-import sys
-import chunk
-from settings import *
-from utils import extend_bbox, dask_read_array, dask_write_array
-from dask.diagnostics import ProgressBar
+import chunk_pipeline.tasks.chunk as chunk
+from chunk_pipeline.utils import extend_bbox
 
 
-def main(base_path, id, h5):
-    assert h5 in ["raw", "raw_gt"]
-    bboxes = np.load(os.path.join(base_path, "bbox.npy")).astype(int)
+def task_extract_seg(id):
+    def inner(cfg, bbox, h5):
+        assert "raw" in h5
 
-    # id is in range(50)
-    row = extend_bbox(
-        bboxes[id - 1], h5py.File(os.path.join(base_path, "raw.h5")).get("main").shape
-    )
+        bbox = bbox["bbox"].astype(int)
+        row = extend_bbox(bbox[id], h5["raw"].shape)
 
-    if "gt" not in h5:
-        raw = h5py.File(os.path.join(base_path, "raw.h5")).get("main")
-        raw = dask_read_array(raw)
+        results = {}
+        results["raw"] = chunk.get_seg(h5["raw"], row, filter_id=True)
+        if "seg" in h5:
+            results["seg"] = (
+                chunk.get_seg(h5["seg"], row, filter_id=False) * results["raw"]
+            )
+        if "spine" in h5:
+            results["spine"] = (
+                chunk.get_seg(h5["spine"], row, filter_id=False) * results["raw"]
+            )
 
-        output_file = os.path.join(base_path, f"{row[0]}.h5")
-        seg = chunk.get_seg(raw, row, filter_id=True)
-    else:
-        raw = h5py.File(os.path.join(base_path, f"{row[0]}.h5")).get("main")
-        raw = dask_read_array(raw)
+        return results
 
-        raw_gt = h5py.File(os.path.join(base_path, "raw_gt.h5")).get("main")
-        raw_gt = dask_read_array(raw_gt)
-
-        output_file = os.path.join(base_path, f"gt_{row[0]}.h5")
-        # NOTE: this does not include the trunk as a segmentation
-        seg = chunk.get_seg(raw_gt, row, filter_id=False) * raw
-
-    file = dask_write_array(output_file, "main", seg)
-    file.create_dataset("row", data=row)
-    file.close()
-
-
-if __name__ == "__main__":
-    with ProgressBar():
-        main(sys.argv[1], int(sys.argv[2]), sys.argv[3])
+    return inner

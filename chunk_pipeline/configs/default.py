@@ -6,7 +6,7 @@ TASK = None  # den_seg/mouse/human/etc. this als
 
 # {TASK} will be filled in at runtime
 _base_path = "/mmfs1/data/adhinart/dendrite/data"
-MISC__MEMUSAGE_PATH = _base_path + "/{TASK}/memusage.csv"
+# MISC__MEMUSAGE_PATH = _base_path + "/{TASK}/memusage.csv"
 MISC__ZARR_PATH = _base_path + "/{TASK}/zarr"
 
 
@@ -21,6 +21,8 @@ GENERAL__ANISOTROPY = None  # depends on the dataset, must be specified in confi
 # ANISOTROPY = (30, 6, 6)
 # for human and mouse
 # ANISOTROPY = (30, 8, 8)
+
+H5 = None  # form {"raw": (file, dataset)}
 
 # baseline related hyperparameters
 BASELINE__CONNECTIVITY = 26
@@ -52,6 +54,15 @@ KIMI__PARAMS = {
     },
     "dust_threshold": 1000,
 }
+# fuse: merge until only one connected component remaining
+# list because config does not allow None values
+KIMI__POSTPROCESS_PARAMS = {
+    "dust_threshold": KIMI__PARAMS["dust_threshold"],
+    "tick_threshold": 3500,
+    "fuse_radius": 200, # at what distance nodes should be fused
+}
+# where 6 represents the minimum anisotropy
+assert KIMI__POSTPROCESS_PARAMS["fuse_radius"] < 6*min(GENERAL__CHUNK_SIZE)
 
 # evaluation hyperparameters
 EVAL__THRESHOLD = (np.arange(1, 10) / 10).tolist()
