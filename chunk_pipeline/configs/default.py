@@ -87,17 +87,12 @@ SLURM__PROJECT_NAME = "{TASK}"
 SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100"
 SLURM__CORES_PER_JOB = 48
 
-# in GiB
-_target_slurm_memory_per_job = 240
-# get this by running fil-profile run debug.py (max memory used by a task)
-# in practice, dask allocates ~55% of what is requested
-_slurm_memory_per_task = 20
-# _slurm_memory_per_task = 12
-_slurm_threads_per_job = _target_slurm_memory_per_job / _slurm_memory_per_task
-
 # https://github.com/dask/dask-jobqueue/issues/181#issue-372752428
-SLURM__NUM_PROCESSES_PER_JOB = math.ceil(SLURM__CORES_PER_JOB / _slurm_threads_per_job)
-SLURM__MEMORY_PER_JOB = math.ceil(_slurm_threads_per_job * _slurm_memory_per_task)
+SLURM__NUM_PROCESSES_PER_JOB = 1
+# in GiB
+SLURM__MEMORY_PER_JOB = 240
+# get this by running fil-profile run debug.py (max memory used by a task)
+SLURM__MEMORY_PER_TASK = 8 # to calculate number of threads per job
 SLURM__WALLTIME = "120:00:00"
 SLURM__MIN_JOBS = 20
 SLURM__LOCAL_DIRECTORY = "/scratch/adhinart/chunk_pipeline"

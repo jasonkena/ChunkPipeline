@@ -58,6 +58,7 @@ def parallelize(func):
             walltime=slurm["WALLTIME"],
             processes=slurm["NUM_PROCESSES_PER_JOB"],
             interface=slurm["INTERFACE"],
+            worker_extra_args = ["--nthreads", str(slurm["MEMORY_PER_JOB"]//slurm["MEMORY_PER_TASK"])]
         ) if slurm_exists else LocalCluster() as cluster, Client(cluster) as client:
 
             print(cluster.dashboard_link)
@@ -357,3 +358,4 @@ class Pipeline(ABC):
         self.compute() to compute all tasks
         """
         return
+
