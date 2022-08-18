@@ -1,31 +1,23 @@
 import numpy as np
 import h5py
-from settings import *
-import os
-import sys
 import math
 
-import chunk
-import sphere
-from utils import dask_write_array, dask_read_array
+import chunk_pipeline.tasks.chunk as chunk
+import chunk_pipeline.tasks.sphere as sphere
 
 import dask
 import dask.array as da
 
-from dask.diagnostics import ProgressBar
-
 
 @dask.delayed
-def _aggregate_dt(vol, real_anisotropy, dtype):
-    dt = sphere._get_dt(
-        vol.astype(dtype), real_anisotropy, black_border=False, block_info=None
-    )
+def _aggregate_dt(vol, real_anisotropy, uint_dtype):
+    dt = sphere._get_dt(vol.astype(uint_dtype), real_anisotropy, black_border=False)
     return np.max(dt)
 
 
-def max_dt(vol, chunk_width, anisotropy, dtype=UINT_DTYPE):
+def max_dt(vol, chunk_width, anisotropy, uint_dtype):
     downsampled, real_anisotropy = chunk.chunk_downsample(vol, chunk_width, anisotropy)
-    max_dt_val = _aggregate_dt(downsampled, real_anisotropy, dtype)
+    max_dt_val = _aggregate_dt(downsampled, real_anisotropy, uint_dtype)
 
     return max_dt_val
 
@@ -39,6 +31,7 @@ def inference(
     pred_threshold,
     chunk_size,
     connectivity,
+    uint_dtype,
 ):
     # merged_pred ([N, 4]) are the points in original coordinate system (pre-anisotropy and cropping), with a column for predictions
     # duplicate predictions are handled appropriately
@@ -71,10 +64,12 @@ def inference(
 
     # now do volume filling
     shape = vol_dataset.shape
-    seeded = chunk_seed(shape, points, pred, chunk_size)
+    seeded = chunk_seed(shape, points, pred, chunk_size, uint_dtype)
 
     # NOTE: downsample_radius could be a hyperparameter; it is computed for correctness
-    dt_threshold = max_dt(vol_dataset, downsample_radius, anisotropy).compute()
+    dt_threshold = max_dt(
+        vol_dataset, downsample_radius, anisotropy, uint_dtype
+    ).compute()
     trunk_dt = sphere.get_dt(
         seeded,
         anisotropy,
@@ -109,7 +104,7 @@ def _chunk_seed(vol, merged, block_info):
     return [vol]
 
 
-def chunk_seed(vol_shape, points, pred, chunk_size, dtype=UINT_DTYPE):
+def chunk_seed(vol_shape, points, pred, chunk_size, uint_dtype):
     chunk_idx = np.floor(
         points.astype(float) / np.array(chunk_size).reshape(1, -1)
     ).astype(int)
@@ -135,10 +130,10 @@ def chunk_seed(vol_shape, points, pred, chunk_size, dtype=UINT_DTYPE):
     result = chunk.chunk(
         _chunk_seed,
         [
-            da.zeros(vol_shape, chunks=chunk_size, dtype=dtype),
+            da.zeros(vol_shape, chunks=chunk_size, dtype=uint_dtype),
             da.from_array(chunked, chunks=(1, 1, 1)),
         ],
-        [dtype],
+        output_dataset_dtype=[uint_dtype],
     )
 
     return result
@@ -164,8 +159,3 @@ def main(base_path, id):
         CONNECTIVITY,
     )
     dask_write_array(os.path.join(base_path, f"inferred_{str(id)}.h5"), "seg", final)
-
-
-if __name__ == "__main__":
-    with ProgressBar():
-        main(sys.argv[1], int(sys.argv[2]))

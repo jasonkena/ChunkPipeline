@@ -1,7 +1,26 @@
-from settings import *
 import numpy as np
 
-chunk_location = [1, 2, 3]
-zyx_idx_mask = np.zeros(list(CHUNK_SIZE) + [3], dtype=int)
+import os
+import sys
 
-zyx_idx_mask = zyx_idx_mask + np.array(chunk_location).reshape(1, 1, 1, 3)
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
+import dask
+import dask.array as da
+import chunk_pipeline.tasks.point as point
+
+# chunk_location = [1, 2, 3]
+# zyx_idx_mask = np.zeros(list(CHUNK_SIZE) + [3], dtype=int)
+#
+# zyx_idx_mask = zyx_idx_mask + np.array(chunk_location).reshape(1, 1, 1, 3)
+
+# point
+location = [1, 2, 3]
+shape = [512, 512, 512]
+# dtype = int
+dtype = np.uint16
+
+z, y, x = np.meshgrid(
+    *[np.arange(location[i], location[i] + shape[i], dtype=dtype) for i in range(3)],
+    indexing="ij"
+)

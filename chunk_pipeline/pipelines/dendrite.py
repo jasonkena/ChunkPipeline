@@ -1,7 +1,13 @@
 import zarr
 
 from chunk_pipeline.pipelines import Pipeline
-from chunk_pipeline.tasks import task_load_h5, task_bbox, task_extract_seg, task_skeletonize
+from chunk_pipeline.tasks import (
+    task_load_h5,
+    task_bbox,
+    task_extract_seg,
+    task_skeletonize,
+    task_generate_point_cloud,
+)
 
 
 class DendritePipeline(Pipeline):
@@ -27,6 +33,7 @@ class DendritePipeline(Pipeline):
                 self.add(
                     task_extract_seg(i),
                     f"extracted_{i}",
+                    cfg_groups=["GENERAL"],
                     depends_on=[bbox, h5],
                 )
             )
@@ -34,20 +41,38 @@ class DendritePipeline(Pipeline):
         for i in range(n):
             skeletons.append(
                 self.add(
-                    task_skeletonize(i),
+                    task_skeletonize,
                     f"skeleton_{i}",
                     cfg_groups=["GENERAL", "KIMI"],
-                    depends_on=[bbox, extracted[i]],
+                    depends_on=[extracted[i]],
+                )
+            )
+
+        point_clouds = []
+        for i in [5]:
+            # for i in [34]:
+            # for i in [13]:
+            # for i in range(n):
+            point_clouds.append(
+                self.add(
+                    task_generate_point_cloud,
+                    f"point_cloud_{i}",
+                    cfg_groups=["GENERAL", "PC"],
+                    depends_on=[extracted[i], skeletons[i]],
                 )
             )
 
         self.compute()
-        sources = []
-        dests = []
-        for i in range(n):
-            sources.append(f"skeleton_{i}/skeleton")
-            sources.append(f"skeleton_{i}/longest_path")
-            dests.append(f"{i}/skeleton")
-            dests.append(f"{i}/longest_path")
 
-        self.export("skel.h5", sources, dests)
+        # export skeletons
+        skels = []
+        longest_paths = []
+        for i in range(n):
+            skels.append(self.load(f"skeleton_{i}/skeleton"))
+            longest_paths.append(self.load(f"skeleton_{i}/longest_path"))
+        from chunk_pipeline.utils import object_array
+
+        skels = object_array(skels)
+        longest_paths = object_array(longest_paths)
+
+        self.export("skel.zip", [skels, longest_paths], ["skel", "longest_path"])

@@ -1,29 +1,22 @@
+import numpy as np
 import edt
 import h5py
 import torch
 import torch.nn.functional as F
 import math
-import os
-import sys
+
+import chunk_pipeline.tasks.chunk as chunk
 import expand_parabola
-from settings import *
 
-
-import numpy as np
 import dask.array as da
 import dask
-import chunk
-from utils import dask_read_array, dask_write_array
-from settings import *
-
-from dask.diagnostics import ProgressBar
 
 # NOTE: here naive separation between segments is used: each segment id is processed separately
 # can potentially come up with a way to do it in a chunk-based manner instead of by segments
 # will need to deal with chunk boundaries then
 
 
-def _chunk_get_boundary(vol, block_info):
+def _chunk_get_boundary(vol):
     vol = torch.from_numpy(vol > 0)
     # pad to guarantee that boundary inputs are also padded
     padded_vol = F.pad(vol, (1, 1, 1, 1, 1, 1))
@@ -48,7 +41,7 @@ def get_boundary(vol):
     return boundary
 
 
-def _get_expand_edt(vol, anisotropy, block_info):
+def _get_expand_edt(vol, anisotropy):
     if not vol.flags["C_CONTIGUOUS"]:
         vol = np.ascontiguousarray(vol)
 
@@ -67,7 +60,7 @@ def _get_expand_edt(vol, anisotropy, block_info):
     return [result < 0]
 
 
-def _get_dt(vol, anisotropy, black_border, block_info):
+def _get_dt(vol, anisotropy, black_border):
     # NOTE: might need to pad by one for chunks on borders of input volume
 
     if not vol.flags["C_CONTIGUOUS"]:
@@ -163,7 +156,6 @@ def extract(
     erode_delta,
     num_iter,
 ):
-    print("entering")
     # gets volume segmentation
     # vol: binary 3d volume
     # max_erode: int/float, thresholding distance to cut off spines
@@ -221,8 +213,3 @@ def main(base_path, id):
     file = dask_write_array(output, "seg", seg)
     file.create_dataset("seg_bbox", data=seg_bbox.compute())
     file.close()
-
-
-if __name__ == "__main__":
-    with ProgressBar():
-        main(sys.argv[1], int(sys.argv[2]))

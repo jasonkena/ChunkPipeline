@@ -1,50 +1,144 @@
+import math
 import numpy as np
+
 import dask
 import dask.array as da
-import chunk
-import sphere
-import h5py
-import os
-import sys
-from settings import *
-from utils import extend_bbox, dask_read_array
-from dask.diagnostics import ProgressBar
+
+import chunk_pipeline.tasks.chunk as chunk
+import chunk_pipeline.tasks.sphere as sphere
+from chunk_pipeline.tasks.sphere import get_boundary
 
 
-def main(base_path, id):
-    # id is in range(50)
-    all = h5py.File(os.path.join(base_path, f"{str(id)}.h5")).get("main")
-    all = dask_read_array(all)
-    spine = h5py.File(os.path.join(base_path, "spine.h5")).get("main")
-    spine = dask_read_array(spine)
-
-    bboxes = np.load(os.path.join(base_path, "bbox.npy"))
-    row = extend_bbox(bboxes[id - 1], spine.shape)
-
-    sparse_file = os.path.join(base_path, f"sparse_{row[0]}.npy")
-    dense_file = os.path.join(base_path, f"dense_{row[0]}.npy")
-    if os.path.exists(sparse_file) and os.path.exists(dense_file):
-        return
-
-    new_spine = chunk.get_seg(spine, row, filter_id=True)
-
-    if not os.path.exists(sparse_file):
-        boundary = sphere.get_boundary(all)
-        # this is probably what crashed
-        sparse_output = chunk.chunk_nonzero(boundary, extra=new_spine)
-        sparse_output = sparse_output + np.array([row[1], row[3], row[5], 0]).reshape(
-            1, -1
-        )
-        np.save(sparse_file, sparse_output.compute())
-
-    if not os.path.exists(dense_file):
-        dense_output = chunk.chunk_nonzero(all, extra=new_spine)
-        dense_output = dense_output + np.array([row[1], row[3], row[5], 0]).reshape(
-            1, -1
-        )
-        np.save(dense_file, dense_output.compute())
+def _chunk_zyx_idx_mask(vol, row, uint_dtype, block_info):
+    # compute zyx_idx in a chunkwise manner since da.arange broadcasting leads to memory errors on rechunking
+    location = block_info[0]["array-location"]
+    location = [x[0] for x in location]
+    # ij for zyx ordering
+    # offset by block coordinates
+    z, y, x = np.meshgrid(
+        *[
+            np.arange(location[i], location[i] + vol.shape[i], dtype=uint_dtype)
+            for i in range(3)
+        ],
+        indexing="ij"
+    )
+    return [z + row[1], y + row[3], x + row[5]]
 
 
-if __name__ == "__main__":
-    with ProgressBar():
-        main(sys.argv[1], int(sys.argv[2]))
+def chunk_idx(shape, row, chunk_size, uint_dtype):
+    temp = da.zeros(
+        shape, chunks=chunk_size, dtype=bool
+    )  # used only to compute block_info
+    z, y, x = chunk.chunk(
+        _chunk_zyx_idx_mask,
+        [temp],
+        output_dataset_dtypes=[int, int, int],
+        row=row,
+        uint_dtype=uint_dtype,
+    )
+    return z, y, x
+
+
+# def chunk_idx(shape, row):
+#     # returns [z, y, x, 3]
+#     n = len(shape)
+#     idx = []
+#     for i in range(n):
+#         temp = [1] * (n + 1)
+#         temp[i] = shape[i]
+#         idx.append(da.arange(shape[i]).reshape(temp))
+#     idx = [da.broadcast_to(x, list(shape) + [1]) for x in idx]
+#     idx = da.concatenate(idx, axis=-1)
+#     idx = idx + np.array([row[1], row[3], row[5]]).reshape(1, 1, 1, -1)
+#
+#     return idx
+#
+
+
+def chunk_mask(mask, arrays, row, chunk_size, uint_dtype):
+    idx = chunk_idx(mask.shape, row, chunk_size, uint_dtype)
+    # splitting idx into 3-3D arrays so that binary indexing works
+    arrays = list(idx) + arrays
+    arrays = [arrays.rechunk(chunk_size) for arrays in arrays]
+    results = [x[mask] for x in arrays]
+    idx, results = results[:3], results[3:]
+    idx = da.stack(idx, axis=-1, allow_unknown_chunksizes=True)
+    return idx, results
+
+
+# def chunk_mask(mask, arrays, row, chunk_size):
+#     mask = mask.rechunk(chunk_size)
+#     mask_chunks = mask.blocks.ravel()
+#
+#     idx = chunk_idx(mask.shape, row)
+#     arrays = [idx[..., i] for i in range(3)] + arrays
+#     arrays = [arrays.rechunk(chunk_size) for arrays in arrays]
+#
+#     results = []
+#     for array in arrays:
+#         assert mask.chunks == array.chunks
+#         # not sure how to rewrite with map_blocks/chunk.chunk
+#         array_chunks = array.blocks.ravel()
+#
+#         results.append(
+#             da.concatenate(
+#                 [array_chunks[i][mask_chunks[i]] for i in range(len(mask_chunks))],
+#                 axis=0,
+#             )
+#         )
+#     # idx, rest of the arrays
+#     __import__("pdb").set_trace()
+#     # NOTE: idx and not arrays is what's causing the bottleneck
+#     return results[0], results[1:]
+#
+
+
+@dask.delayed
+def get_seed(skel, longest_path, row):
+    radius = skel.radius  # real units
+
+    vertices = skel.vertices
+    vertices = vertices - np.array([row[1], row[3], row[5]]).reshape(1, -1)
+
+    return vertices[longest_path].astype(int), radius[longest_path]
+
+
+def task_generate_point_cloud(cfg, extracted, skel):
+    general = cfg["GENERAL"]
+    pc = cfg["PC"]
+    row = extracted["row"]
+    raw = extracted["raw"]
+    spine = extracted["spine"]
+    boundary = get_boundary(raw)
+    # these are delayed objects
+    longest_path = skel["longest_path"]
+    skel = skel["skeleton"]
+
+    # compute seed in extracted_seg coordinate system (as opposed to dataset coordinate system)
+    temp = get_seed(skel, longest_path, row)
+    seed, radius = temp[0], temp[1]  # since delayed objects cannot be unpacked
+    seed = da.from_delayed(seed, shape=(np.nan, 3), dtype=int)
+    radius = (
+        da.from_delayed(radius, shape=(np.nan,), dtype=float) + pc["TRUNK_RADIUS_DELTA"]
+    )
+
+    seeded = chunk.groupby_chunk_seed(
+        raw.shape, seed, radius, general["CHUNK_SIZE"], float
+    )
+    expanded = sphere.get_expand_edt(seeded, general["ANISOTROPY"], da.max(radius))
+
+    idx, arrays = chunk_mask(
+        raw,
+        [spine, boundary, expanded],
+        row,
+        general["CHUNK_SIZE"],
+        general["UINT_DTYPE"],
+    )
+
+    result = {}
+    result["idx"] = idx
+    result["spine"] = arrays[0]
+    result["boundary"] = arrays[1]
+    result["expanded"] = arrays[2]
+
+    return result

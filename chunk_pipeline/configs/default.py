@@ -6,8 +6,8 @@ TASK = None  # den_seg/mouse/human/etc. this als
 
 # {TASK} will be filled in at runtime
 _base_path = "/mmfs1/data/adhinart/dendrite/data"
-# MISC__MEMUSAGE_PATH = _base_path + "/{TASK}/memusage.csv"
-MISC__ZARR_PATH = _base_path + "/{TASK}/zarr"
+MISC__MEMUSAGE_PATH = _base_path + "/{TASK}/memusage.csv"
+MISC__ZARR_PATH = _base_path + "/{TASK}/"
 
 
 GENERAL__UINT_DTYPE = np.uint16
@@ -31,8 +31,9 @@ BASELINE__ERODE_DELTA = 100
 BASELINE__NUM_ITER = 1
 
 # point cloud inference hyperparameters
-PC__DOWNSAMPLE_RADIUS = 200
+PC__DOWNSAMPLE_RADIUS = 200  # for expand_parabola threshold estimation
 PC__PRED_THRESHOLD = 0.5
+PC__TRUNK_RADIUS_DELTA = 30
 
 # merging hyperparameters
 # NUM_DENDRITES = 50
@@ -59,10 +60,10 @@ KIMI__PARAMS = {
 KIMI__POSTPROCESS_PARAMS = {
     "dust_threshold": KIMI__PARAMS["dust_threshold"],
     "tick_threshold": 3500,
-    "fuse_radius": 200, # at what distance nodes should be fused
+    "fuse_radius": 200,  # at what distance nodes should be fused
 }
 # where 6 represents the minimum anisotropy
-assert KIMI__POSTPROCESS_PARAMS["fuse_radius"] < 6*min(GENERAL__CHUNK_SIZE)
+assert KIMI__POSTPROCESS_PARAMS["fuse_radius"] < 6 * min(GENERAL__CHUNK_SIZE)
 
 # evaluation hyperparameters
 EVAL__THRESHOLD = (np.arange(1, 10) / 10).tolist()
@@ -87,10 +88,11 @@ SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100"
 SLURM__CORES_PER_JOB = 48
 
 # in GiB
-_target_slurm_memory_per_job = 180
+_target_slurm_memory_per_job = 240
 # get this by running fil-profile run debug.py (max memory used by a task)
 # in practice, dask allocates ~55% of what is requested
-_slurm_memory_per_task = 6
+_slurm_memory_per_task = 20
+# _slurm_memory_per_task = 12
 _slurm_threads_per_job = _target_slurm_memory_per_job / _slurm_memory_per_task
 
 # https://github.com/dask/dask-jobqueue/issues/181#issue-372752428
@@ -98,6 +100,6 @@ SLURM__NUM_PROCESSES_PER_JOB = math.ceil(SLURM__CORES_PER_JOB / _slurm_threads_p
 SLURM__MEMORY_PER_JOB = math.ceil(_slurm_threads_per_job * _slurm_memory_per_task)
 SLURM__WALLTIME = "120:00:00"
 SLURM__MIN_JOBS = 20
-SLURM__LOCAL_DIRECTORY = "/scratch/adhinart"
+SLURM__LOCAL_DIRECTORY = "/scratch/adhinart/chunk_pipeline"
 SLURM__DASHBOARD_PORT = 8888
 SLURM__INTERFACE = "ib0"

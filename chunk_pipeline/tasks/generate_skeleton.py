@@ -148,7 +148,7 @@ def _chunk_connect_skels(all_skels, fuse_radius, pre_merge=False):
             skels.append(i)
     if pre_merge:
         skels = Skeleton.simple_merge(skels).consolidate()
-    
+
     return [fast_join_close_components(skels, radius=fuse_radius)]
 
 
@@ -180,32 +180,29 @@ def _longest_path(skel):
     return longest_path
 
 
-def task_skeletonize(id):
-    def inner(cfg, bbox, vol):
-        vol = vol["raw"]
-        row = bbox["bbox"][id]
-        general = cfg["GENERAL"]
-        kimi = cfg["KIMI"]
-        post = kimi["POSTPROCESS_PARAMS"]
+def task_skeletonize(cfg, extracted):
+    vol = extracted["raw"]
+    row = extracted["row"]
+    general = cfg["GENERAL"]
+    kimi = cfg["KIMI"]
+    post = kimi["POSTPROCESS_PARAMS"]
 
-        downsampled, offsets, real_anisotropy = chunk_downsample(
-            vol, general["ANISOTROPY"], kimi["DOWNSAMPLE_RADIUS"]
-        )
+    downsampled, offsets, real_anisotropy = chunk_downsample(
+        vol, general["ANISOTROPY"], kimi["DOWNSAMPLE_RADIUS"]
+    )
 
-        skels = chunk_kimimaro(
-            downsampled, offsets, kimi["PARAMS"], real_anisotropy, general["ANISOTROPY"]
-        )
-        # ensure everything is merged
-        skels = chunk_connect_skels(skels, fuse_radius=None)
+    skels = chunk_kimimaro(
+        downsampled, offsets, kimi["PARAMS"], real_anisotropy, general["ANISOTROPY"]
+    )
+    # ensure everything is merged
+    skels = chunk_connect_skels(skels, fuse_radius=None)
 
-        skel = _aggregate_skels(
-            skels,
-            post["dust_threshold"],
-            post["tick_threshold"],
-            post["fuse_radius"],
-            row,
-        )
-        longest_path = _longest_path(skel)
-        return {"skeleton": skel, "longest_path": longest_path}
-
-    return inner
+    skel = _aggregate_skels(
+        skels,
+        post["dust_threshold"],
+        post["tick_threshold"],
+        post["fuse_radius"],
+        row,
+    )
+    longest_path = _longest_path(skel)
+    return {"skeleton": skel, "longest_path": longest_path}

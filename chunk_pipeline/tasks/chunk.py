@@ -4,12 +4,14 @@ import math
 import string
 
 import numpy as np
+import pandas as pd
 import cc3d
 from imu.io import get_bb_all3d
 from unionfind import UnionFind
 
 import dask
 import dask.array as da
+import dask.dataframe as df
 
 from chunk_pipeline.utils import object_array
 
@@ -119,17 +121,18 @@ def chunk(
         ]
     new_chunks = input_datasets[0].chunks
 
-    # [z, y, x, num_outputs]
-    output = da.map_blocks(
-        partial_func(func),
-        *input_datasets,
-        dtype=object,
-        chunks=[*(1 for _ in range(len(shape))), len(output_dataset_dtypes)],
-        meta=np.empty(1, dtype=object),
-        new_axis=len(shape),
-        name=f"chunk_output_{name}",
+    kwargs = {
+        "dtype": object,
+        "chunks": [*(1 for _ in range(len(shape))), len(output_dataset_dtypes)],
+        "meta": np.empty(1, dtype=object),
+        "new_axis": len(shape),
+        "name": f"chunk_output_{name}",
         **kwargs,
-    )
+    }
+    # if overwrite_kwargs:
+    #     kwargs = overwrite_kwargs(kwargs)
+    # [z, y, x, num_outputs]
+    output = da.map_blocks(partial_func(func), *input_datasets, **kwargs)
 
     final = []
     for idx, dtype in enumerate(output_dataset_dtypes):
@@ -452,51 +455,51 @@ def chunk_cc3d(vol, connectivity, k, uint_dtype):
     return partial_cc3d, voxel_counts
 
 
-def _chunk_nonzero(vol, uint_dtype, extra=None, block_info=None):
-    # kwargs must contain func, and it must return 2 things: binary mask and another (array or None)
-    # returns indices where vol is true
-    # [3, N]
-    idx = np.stack(np.nonzero(vol), axis=1)
-    if extra is not None:
-        extra = extra[vol.astype(bool)]
-    idx = idx + np.array(
-        [block_info[0]["array-location"][i][0] for i in range(3)]
-    ).reshape(-1, 3)
-    if extra is not None:
-        idx = np.concatenate([idx, extra.reshape(-1, 1)], axis=1)
+# def _chunk_nonzero(vol, uint_dtype, extra=None, block_info=None):
+#     # kwargs must contain func, and it must return 2 things: binary mask and another (array or None)
+#     # returns indices where vol is true
+#     # [3, N]
+#     idx = np.stack(np.nonzero(vol), axis=1)
+#     if extra is not None:
+#         extra = extra[vol.astype(bool)]
+#     idx = idx + np.array(
+#         [block_info[0]["array-location"][i][0] for i in range(3)]
+#     ).reshape(-1, 3)
+#     if extra is not None:
+#         idx = np.concatenate([idx, extra.reshape(-1, 1)], axis=1)
+#
+#     return [idx.astype(uint_dtype)]
+#
+#
+# @dask.delayed
+# def _aggregate_nonzero(idx):
+#     idx = np.concatenate(idx.flatten(), axis=0)
+#     # for ordering purposes
+#     return np.unique(idx, axis=0)
+#
+#
+# def chunk_nonzero(vol, uint_dtype, extra=None):
+#     # TODO: implement chunked saving instead of aggregating all indices
+#     inputs = [vol, extra] if extra is not None else [vol]
+#     result = chunk(
+#         _chunk_nonzero,
+#         inputs,
+#         [object],
+#         align_idx=([0, 1] if extra is not None else None),
+#         uint_dtype=uint_dtype,
+#     )
+#     result = _aggregate_nonzero(result)
+#     result = da.from_delayed(
+#         result, shape=[np.nan, 3 + (extra is not None)], dtype=uint_dtype
+#     )
 
-    return [idx.astype(uint_dtype)]
 
-
-@dask.delayed
-def _aggregate_nonzero(idx):
-    idx = np.concatenate(idx.flatten(), axis=0)
-    # for ordering purposes
-    return np.unique(idx, axis=0)
-
-
-def chunk_nonzero(vol, uint_dtype, extra=None):
-    # TODO: implement chunked saving instead of aggregating all indices
-    inputs = [vol, extra] if extra is not None else [vol]
-    result = chunk(
-        _chunk_nonzero,
-        inputs,
-        [object],
-        align_idx=([0, 1] if extra is not None else None),
-        uint_dtype=uint_dtype,
-    )
-    result = _aggregate_nonzero(result)
-    result = da.from_delayed(
-        result, shape=[np.nan, 3 + (extra is not None)], dtype=uint_dtype
-    )
-    return result
-
-
-def get_seg(vol, bbox, filter_id):
+def get_seg(vol, bbox, chunk_size, filter_id):
     if filter_id:
         vol = vol == bbox[0]
     # extra +1 due to bbox format
-    return vol[bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1]
+    result = vol[bbox[1] : bbox[2] + 1, bbox[3] : bbox[4] + 1, bbox[5] : bbox[6] + 1]
+    return result.rechunk(chunk_size)
 
 
 def merge_seg(output, vol, bbox, merge_func):
@@ -576,3 +579,89 @@ def chunk_downsample(vol, chunk_width, anisotropy):
     # an approximation of chunk_width
     real_anisotropy = [chunk_size[i] * anisotropy[i] for i in range(3)]
     return downsampled, real_anisotropy
+
+
+def _chunk_seed_groupby(dataframe, chunk_size, dtype):
+    # compute as dask array instead of np to avoid memory issues
+    vol = da.zeros(math.prod(chunk_size), dtype=dtype)
+    z, y, x = [dataframe[v] for v in ["rel_z", "rel_y", "rel_x"]]
+    z, y, x = [np.array(v).astype(int) for v in [z, y, x]]
+    idx = z * chunk_size[1] * chunk_size[2] + y * chunk_size[2] + x
+    vol[idx] = np.array(dataframe["value"])
+    vol = vol.reshape(chunk_size)
+    return pd.DataFrame({"obj": [vol]}, index=[0])
+
+
+@dask.delayed
+def _chunk_seed_write(shape, chunk_size, dataframe, dtype):
+    vol = da.zeros(shape, chunks=chunk_size, dtype=dtype)
+    objs = list(dataframe["obj"])
+    for i, (z, y, x, _) in enumerate(dataframe.index):
+        z0 = z * chunk_size[0]
+        y0 = y * chunk_size[1]
+        x0 = x * chunk_size[2]
+        z1 = min(z0 + chunk_size[0], shape[0])
+        y1 = min(y0 + chunk_size[1], shape[1])
+        x1 = min(x0 + chunk_size[2], shape[2])
+
+        vol[z0:z1, y0:y1, x0:x1] = objs[i][: z1 - z0, : y1 - y0, : x1 - x0]
+    return vol
+
+
+def groupby_chunk_seed(shape, points, values, chunk_size, dtype):
+    # shape: (z, y, x)
+    # points: (np.nan, 3)
+    # values: (np.nan)
+    # dtype is not necessarily uint
+    chunk_idx = da.floor(points / np.array(chunk_size).reshape(1, -1)).astype(int)
+    rel_points = points - chunk_idx * np.array(chunk_size).reshape(1, -1)
+
+    # merged = da.concatenate(
+    #     [chunk_idx, rel_points, values[:, np.newaxis]],
+    #     axis=1,
+    #     allow_unknown_chunksizes=True,
+    # )
+    col_names = [
+        ["chunk_z", "chunk_y", "chunk_x"],
+        ["rel_z", "rel_y", "rel_x"],
+        ["value"],
+    ]
+    columns = [
+        df.from_dask_array(x, columns=col_names[i])
+        for i, x in enumerate([chunk_idx, rel_points, values[:, np.newaxis]])
+    ]
+    dataframe = df.concat(columns, axis=1, ignore_unknown_divisions=True)
+
+    dataframe = dataframe.groupby(["chunk_z", "chunk_y", "chunk_x"]).apply(
+        _chunk_seed_groupby, meta={"obj": object}, chunk_size=chunk_size, dtype=dtype
+    )
+    # gross hack to allow delayed(dask.array) to function like dask.array
+    result = _chunk_seed_write(shape, chunk_size, dataframe, dtype)
+    result = da.from_delayed(result, shape=shape, dtype=dtype).rechunk(chunk_size)
+    result = da.map_blocks(lambda x: x.compute(), result, dtype=dtype)
+
+    return result
+
+
+# def chunk_seed(shape, points, values, chunk_size, dtype):
+#     # does not work well, since flattening ruins chunking
+#     if np.isnan(points.shape).any():
+#         points.compute_chunk_sizes()
+#     if np.isnan(values.shape).any():
+#         values.compute_chunk_sizes()
+#     vol = da.zeros(math.prod(shape), dtype=dtype)
+#
+#     # https://github.com/dask/dask/pull/3407
+#     idx = points[:, 0] * (shape[1] * shape[2]) + points[:, 1] * shape[2] + points[:, 2]
+#     vol[(idx,)] = values
+#     vol = vol.reshape(shape).rechunk(chunk_size)#, limit="128MiB")
+#
+#     return vol
+#
+# def naive_chunk_seed(shape, points, values, chunk_size, dtype):
+#     shape, points = dask.compute(shape, points)
+#     z, y, x = [points[:, i].tolist() for i in range(3)]
+#     vol = da.zeros(shape, dtype=dtype, chunks=chunk_size)
+#     vol.vindex[z, y, x] = values
+#
+#     return vol

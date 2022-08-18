@@ -16,3 +16,8 @@ class CoarsePipeline(Pipeline):
             depends_on=[original],
         )
         self.compute()
+        self.export(
+            "coarse_seg.zip",
+            ["coarse_seg/seg", "coarse_seg/voxel_counts"],
+            ["seg", "voxel_counts"],
+        )

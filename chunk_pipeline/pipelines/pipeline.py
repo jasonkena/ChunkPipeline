@@ -1,21 +1,22 @@
 import os
 import shutil
 from abc import ABC, abstractmethod
+import itertools
 
 import numpy as np
-import h5py
 
 import dask
 import dask.array as da
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client, LocalCluster, wait
+from dask.graph_manipulation import bind
 
+import chunk_pipeline.tasks.chunk as chunk
 from chunk_pipeline.utils import object_array
 from chunk_pipeline.configs import Config
 
 import zarr
 import numcodecs
-
 
 # https://stackoverflow.com/questions/952914/how-do-i-make-a-flat-list-out-of-a-list-of-lists
 def flatten(l):
@@ -31,10 +32,20 @@ def parallelize(func):
         slurm = self.cfg["SLURM"]
         misc = self.cfg["MISC"]
 
+        # # dask.config.set(scheduler='single-threaded')
+        # from dask_memusage import install
+        # cluster = LocalCluster(n_workers=10, threads_per_worker=1,
+        #                memory_limit=None)
+        # install(cluster.scheduler, misc["MEMUSAGE_PATH"])  # <-- INSTALL
+        # client = Client(cluster)
+        # print(cluster.dashboard_link)
+        # return func(self, *args, **kwargs)
+        #
         if (slurm_exists := shutil.which("sbatch")) is None:
             print("SLURM not available, falling back to LocalCluster")
 
         dask.config.set({"distributed.comm.timeouts.connect": "300s"})
+        dask.config.set({"array.slicing.split_large_chunks": False})
         # dask.config.set({"distributed.comm.retry.count": 3})
         # dask.config.set({'distributed.scheduler.idle-timeout' : "5 minutes"})
         with SLURMCluster(
@@ -142,7 +153,11 @@ class Pipeline(ABC):
             ].copy()  # not using group.attrs since pickling is not supported
             for key in group.keys():
                 if key[0] != "_":
-                    chunks = result.pop(f"_{key}")
+                    if f"_{key}" in result:
+                        chunks = result.pop(f"_{key}")
+                    else:
+                        print(f"chunks missing in {key}, assuming object_array")
+                        chunks = None
                     result[key] = da.from_zarr(group[key], chunks=chunks)
             return False, result
 
@@ -185,7 +200,6 @@ class Pipeline(ABC):
         return results
 
     def checkpoint(self, original_results, idx):
-        pointer = None
         results = {i: original_results[i].copy() for i in idx}
         groups = {
             i: zarr.open_group(store=self.store, path=self.tasks[i]["path"], mode="w")
@@ -197,31 +211,41 @@ class Pipeline(ABC):
         for i in idx:
             for key in list(results[i].keys()):
                 if isinstance(results[i][key], da.Array):
-                    value = results[i].pop(key) # remove arrays from the graph to form an attr graph
+                    is_object = False
+                    value = results[i].pop(
+                        key
+                    )  # remove arrays from the graph to form an attr graph
                     if np.isnan(value.shape).any():
-                        if pointer is None:
-                            # prevent recalculation
-                            print("Persisting computations due to compute_chunk_sizes")
-                            pointer = dask.persist(original_results)
-                        value.compute_chunk_sizes()
+                        value = chunk.chunk(lambda x: [x], [value], [object])
+                        is_object = True
                     if not da.core._check_regular_chunks(value.chunks):
+                        print(f"{key} has irregular chunks; please rechunk")
                         value = da.rechunk(
                             value,
-                            chunks=(self.cfg["GENERAL"]["CHUNK_SIZE"][0],) * len(value.shape),
+                            chunks=(self.cfg["GENERAL"]["CHUNK_SIZE"][0],)
+                            * len(value.shape),
                         )
 
                     # chunks will be saved in _attrs
-                    results[i][f"_{key}"] = value.chunks
+                    if not is_object:
+                        results[i][f"_{key}"] = value.chunks
 
+                    path = f"{groups[i].path}/{'_'+key if is_object else key}"
                     stored.append(
                         da.to_zarr(
                             value,
                             url=self.store.path,
-                            component=f"{groups[i].path}/{key}",
+                            component=path,
                             compute=False,
+                            object_codec=numcodecs.Pickle(),
                         )
                     )
+                    if is_object:
+                        stored.append(self.fix_object_array(path, stored[-1]))
         _, attrs = dask.compute(stored, results)
+
+        # fix object arrays
+
         for i in idx:
             groups[i].create_dataset(
                 "_attrs",
@@ -238,6 +262,60 @@ class Pipeline(ABC):
             )
         return
 
+    @dask.delayed
+    def fix_object_array(self, path, old_store=None):
+        tokens = path.split("/")
+        dir, name = "/".join(tokens[:-1]), tokens[-1]
+        assert name[0] == "_"
+
+        array = da.from_zarr(self.load(path))
+        array = array.rechunk([1] * len(array.shape))
+        shape, dtype = chunk.chunk(
+            lambda x: [x.item().shape, x.item().dtype],
+            [array],
+            output_dataset_dtypes=[object, object],
+        )
+        shape, dtype = dask.compute(shape, dtype)
+        dtype = set(dtype.flatten().tolist())
+        assert len(dtype) == 1
+        dtype = dtype.pop()
+
+        chunks = [[np.nan] * x for x in array.shape]
+        for chunk_idx in itertools.product(*[range(len(x)) for x in chunks]):
+            for dim, dim_idx in enumerate(chunk_idx):
+                computed_shape = shape[chunk_idx][dim]
+                if np.isnan(chunks[dim][dim_idx]):
+                    chunks[dim][dim_idx] = computed_shape
+                else:
+                    # asserts that chunk size matches known values
+                    assert chunks[dim][dim_idx] == computed_shape
+        chunks = tuple([tuple(x) for x in chunks])
+        reconstructed = da.map_blocks(
+            lambda x: x.item(),
+            array,
+            dtype=dtype,
+            chunks=chunks,
+            name="reconstruct_unknown",
+        ).rechunk()  # normalize chunks
+        # NOTE: object_arrays will have no chunks attr
+
+        return da.to_zarr(
+            reconstructed,
+            url=self.store.path,
+            component=os.path.join(dir, name[1:]),
+            compute=True,
+        )
+
+    def load(self, source):
+        tokens = source.split("/")
+        dir, name = "/".join(tokens[:-1]), tokens[-1]
+
+        group = zarr.open_group(store=self.store, path=dir, mode="r")
+        if name in group:
+            return group[name]
+        else:
+            return group["_attrs"][0][name]
+
     def export(self, path, sources, dests):
         # path of h5 file to export to
         # sources is path to zarr arrays (with special handling for _attrs)
@@ -245,16 +323,16 @@ class Pipeline(ABC):
 
         # fail if exists
         assert len(sources) == len(dests)
-        file = h5py.File(os.path.join(self.store.path, path), "w-")
-        for i in range(len(sources)):
-            tokens = sources[i].split("/")
-            dir, name = "/".join(tokens[:-1]), tokens[-1]
+        path = os.path.join(self.store.path, path)
+        if os.path.exists(path):
+            raise Exception("File already exists")
+        file = zarr.group(zarr.storage.ZipStore(path))
 
-            group = zarr.open_group(store=self.store, path=dir, mode="r")
-            if name in group:
-                source = group[name]
+        for i in range(len(sources)):
+            if isinstance(sources[i], str):
+                source = self.load(sources[i])
             else:
-                source = group["_attrs"][0][name]
+                source = sources[i]
 
             tokens = dests[i].split("/")
             dir, name = "/".join(tokens[:-1]), tokens[-1]
@@ -262,7 +340,10 @@ class Pipeline(ABC):
                 dir = "/"
             group = file.require_group(dir)
 
-            zarr.copy(source, group, name)
+            if isinstance(sources[i], str):
+                zarr.copy(source, group, name)
+            else:
+                group.create_dataset(name, data=source, object_codec=numcodecs.Pickle())
         print("Exported finished")
 
     @abstractmethod
