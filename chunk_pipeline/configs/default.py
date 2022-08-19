@@ -92,7 +92,7 @@ SLURM__NUM_PROCESSES_PER_JOB = 1
 # in GiB
 SLURM__MEMORY_PER_JOB = 240
 # get this by running fil-profile run debug.py (max memory used by a task)
-SLURM__MEMORY_PER_TASK = 8 # to calculate number of threads per job
+SLURM__MEMORY_PER_TASK = 8  # to calculate number of threads per job
 SLURM__WALLTIME = "120:00:00"
 SLURM__MIN_JOBS = 20
 SLURM__LOCAL_DIRECTORY = "/scratch/adhinart/chunk_pipeline"

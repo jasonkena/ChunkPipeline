@@ -9,7 +9,7 @@ import chunk_pipeline.tasks.sphere as sphere
 from chunk_pipeline.tasks.sphere import get_boundary
 
 
-def _chunk_zyx_idx_mask(vol, row, uint_dtype, block_info):
+def _chunk_zyx_idx(vol, row, uint_dtype, block_info):
     # compute zyx_idx in a chunkwise manner since da.arange broadcasting leads to memory errors on rechunking
     location = block_info[0]["array-location"]
     location = [x[0] for x in location]
@@ -25,18 +25,38 @@ def _chunk_zyx_idx_mask(vol, row, uint_dtype, block_info):
     return [z + row[1], y + row[3], x + row[5]]
 
 
-def chunk_idx(shape, row, chunk_size, uint_dtype):
+def chunk_zyx_idx(shape, row, chunk_size, uint_dtype):
     temp = da.zeros(
         shape, chunks=chunk_size, dtype=bool
     )  # used only to compute block_info
     z, y, x = chunk.chunk(
-        _chunk_zyx_idx_mask,
+        _chunk_zyx_idx,
         [temp],
         output_dataset_dtypes=[int, int, int],
         row=row,
         uint_dtype=uint_dtype,
     )
     return z, y, x
+
+
+def chunk_idx(mask, array):
+    # basically does array[mask]
+    assert mask.chunks == array.chunks
+    results = (
+        chunk.chunk(
+            lambda mask, array: [array[mask]],
+            [mask, array],
+            output_dataset_dtypes=[object],
+            name="chunk_mask_idx",
+        )
+        .reshape(-1)
+        .to_delayed()
+    )
+    results = [
+        da.from_delayed(x[0], shape=(np.nan,), dtype=array.dtype) for x in results
+    ]
+    results = da.concatenate(results, axis=0)
+    return results
 
 
 # def chunk_idx(shape, row):
@@ -56,11 +76,14 @@ def chunk_idx(shape, row, chunk_size, uint_dtype):
 
 
 def chunk_mask(mask, arrays, row, chunk_size, uint_dtype):
-    idx = chunk_idx(mask.shape, row, chunk_size, uint_dtype)
+    mask = mask.rechunk(chunk_size)
+    idx = chunk_zyx_idx(mask.shape, row, chunk_size, uint_dtype)
     # splitting idx into 3-3D arrays so that binary indexing works
     arrays = list(idx) + arrays
-    arrays = [arrays.rechunk(chunk_size) for arrays in arrays]
-    results = [x[mask] for x in arrays]
+    arrays = [array.rechunk(chunk_size) for array in arrays]
+
+    results = [chunk_idx(mask, x) for x in arrays]
+    # results = [x[mask] for x in arrays]
     idx, results = results[:3], results[3:]
     idx = da.stack(idx, axis=-1, allow_unknown_chunksizes=True)
     return idx, results
