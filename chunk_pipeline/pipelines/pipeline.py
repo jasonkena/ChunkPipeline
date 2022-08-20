@@ -49,22 +49,33 @@ def parallelize(func):
         # dask.config.set({"distributed.comm.retry.count": 3})
         # dask.config.set({'distributed.scheduler.idle-timeout' : "5 minutes"})
         with SLURMCluster(
-            local_directory=slurm["LOCAL_DIRECTORY"],
             job_name=slurm["PROJECT_NAME"],
             queue=slurm["PARTITIONS"],
             cores=slurm["CORES_PER_JOB"],
             memory=f"{slurm['MEMORY_PER_JOB']}GiB",
             scheduler_options={"dashboard_address": f":{slurm['DASHBOARD_PORT']}"},
             walltime=slurm["WALLTIME"],
-            processes=slurm["NUM_PROCESSES_PER_JOB"],
             interface=slurm["INTERFACE"],
             worker_extra_args=[
+                "--nworkers",
+                str(slurm["NUM_PROCESSES_PER_JOB"]),
                 "--nthreads",
-                str(slurm["MEMORY_PER_JOB"] // slurm["MEMORY_PER_TASK"]),
+                str(
+                    int(
+                        slurm["MEMORY_PER_JOB"]
+                        / (slurm["NUM_PROCESSES_PER_JOB"] * slurm["MEMORY_PER_TASK"])
+                    )
+                ),
+                f'--memory-limit="'
+                + str(int(slurm["MEMORY_PER_JOB"] / slurm["NUM_PROCESSES_PER_JOB"]))
+                + 'GiB"',
+                "--local-directory",
+                slurm["LOCAL_DIRECTORY"],
             ],
         ) if slurm_exists else LocalCluster() as cluster, Client(cluster) as client:
 
             print(cluster.dashboard_link)
+            # print(cluster.job_script())
             if slurm_exists:
                 print(
                     "Asking for {} cores, {} GiB of memory, {} processes per job on SLURM".format(

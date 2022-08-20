@@ -95,6 +95,8 @@ SLURM__MEMORY_PER_JOB = 240
 SLURM__MEMORY_PER_TASK = 8  # to calculate number of threads per job
 SLURM__WALLTIME = "120:00:00"
 SLURM__MIN_JOBS = 20
-SLURM__LOCAL_DIRECTORY = "/scratch/adhinart/chunk_pipeline"
+# DO NOT set local_directory to shared Network File System (concurrency problems)
+# random hex is to guarantee unique directory name
+SLURM__LOCAL_DIRECTORY = "/tmp/chunk_pipeline/$(openssl rand -hex 5)"
 SLURM__DASHBOARD_PORT = 8888
 SLURM__INTERFACE = "ib0"
