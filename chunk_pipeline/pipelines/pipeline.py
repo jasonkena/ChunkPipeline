@@ -44,9 +44,7 @@ def parallelize(func):
         if (slurm_exists := shutil.which("sbatch")) is None:
             print("SLURM not available, falling back to LocalCluster")
 
-        with dask.config.set(
-            self.cfg["DASK_CONFIG"], scheduler="processes"
-        ), SLURMCluster(
+        with dask.config.set(self.cfg["DASK_CONFIG"]), SLURMCluster(
             job_name=slurm["PROJECT_NAME"],
             queue=slurm["PARTITIONS"],
             cores=slurm["CORES_PER_JOB"],
@@ -58,16 +56,19 @@ def parallelize(func):
                 "--nworkers",
                 str(slurm["NUM_PROCESSES_PER_JOB"]),
                 "--nthreads",
-                "1",
+                str(
+                    int(
+                        slurm["MEMORY_PER_JOB"]
+                        / (slurm["NUM_PROCESSES_PER_JOB"] * slurm["MEMORY_PER_TASK"])
+                    )
+                ),
                 f'--memory-limit="'
                 + str(int(slurm["MEMORY_PER_JOB"] / slurm["NUM_PROCESSES_PER_JOB"]))
                 + 'GiB"',
                 "--local-directory",
                 slurm["LOCAL_DIRECTORY"],
             ],
-        ) if slurm_exists else LocalCluster() as cluster, Client(
-            cluster
-        ) as client:
+        ) if slurm_exists else LocalCluster() as cluster, Client(cluster) as client:
 
             print(cluster.dashboard_link)
             # print(cluster.job_script())
