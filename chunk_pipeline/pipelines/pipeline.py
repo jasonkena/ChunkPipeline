@@ -46,6 +46,7 @@ def parallelize(func):
 
         dask.config.set({"distributed.comm.timeouts.connect": "300s"})
         dask.config.set({"array.slicing.split_large_chunks": False})
+        dask.config.set({"admin.tick.limit": "1h"})
         # dask.config.set({"distributed.comm.retry.count": 3})
         # dask.config.set({'distributed.scheduler.idle-timeout' : "5 minutes"})
         with SLURMCluster(
