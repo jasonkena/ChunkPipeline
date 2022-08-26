@@ -1,6 +1,16 @@
 import numpy as np
 import math
 
+DASK_CONFIG = {
+    "array.slicing.split_large_chunks": False,
+    "distributed.scheduler.worker-ttl": None,
+}  # prevent GIL holding processes from crashing workers
+# "distributed.comm.timeouts.connect": "300s",
+# worker-ttl:
+# dask.config.set({"admin.tick.limit": "1h"})
+# dask.config.set({"distributed.comm.retry.count": 3})
+# dask.config.set({'distributed.scheduler.idle-timeout' : "5 minutes"})
+
 # __ to delimit hierarchy, read config.py
 TASK = None  # den_seg/mouse/human/etc. this als
 
@@ -99,7 +109,9 @@ SLURM__MIN_JOBS = 20
 # Local directory has to be unique for each job
 # random hex is to guarantee unique directory name
 # SLURM__LOCAL_DIRECTORY = "/tmp/chunk_pipeline/$(openssl rand -hex 5)" # tmp supposedly gets cleared
-# SLURM__LOCAL_DIRECTORY = "/scratch/adhinart/chunk_pipeline/$SLURM_JOB_ID" # scratch locks NFS
-SLURM__LOCAL_DIRECTORY = "/local/adhinart/chunk_pipeline" # assuming only a single job is placed on each node
+SLURM__LOCAL_DIRECTORY = (
+    "/scratch/adhinart/chunk_pipeline/$SLURM_JOB_ID"  # scratch locks NFS
+)
+# SLURM__LOCAL_DIRECTORY = "/local/adhinart/chunk_pipeline"  # assuming only a single job is placed on each node
 SLURM__DASHBOARD_PORT = 8888
 SLURM__INTERFACE = "ib0"

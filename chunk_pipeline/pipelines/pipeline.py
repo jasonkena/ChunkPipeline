@@ -44,12 +44,7 @@ def parallelize(func):
         if (slurm_exists := shutil.which("sbatch")) is None:
             print("SLURM not available, falling back to LocalCluster")
 
-        dask.config.set({"distributed.comm.timeouts.connect": "300s"})
-        dask.config.set({"array.slicing.split_large_chunks": False})
-        dask.config.set({"admin.tick.limit": "1h"})
-        # dask.config.set({"distributed.comm.retry.count": 3})
-        # dask.config.set({'distributed.scheduler.idle-timeout' : "5 minutes"})
-        with SLURMCluster(
+        with dask.config.set(self.cfg["DASK_CONFIG"]), SLURMCluster(
             job_name=slurm["PROJECT_NAME"],
             queue=slurm["PARTITIONS"],
             cores=slurm["CORES_PER_JOB"],
