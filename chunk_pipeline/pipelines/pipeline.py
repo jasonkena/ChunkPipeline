@@ -44,7 +44,7 @@ def parallelize(func):
         if (slurm_exists := shutil.which("sbatch")) is None:
             print("SLURM not available, falling back to LocalCluster")
 
-        with dask.config.set(self.cfg["DASK_CONFIG"]), SLURMCluster(
+        with SLURMCluster(
             job_name=slurm["PROJECT_NAME"],
             queue=slurm["PARTITIONS"],
             cores=slurm["CORES_PER_JOB"],
@@ -217,6 +217,7 @@ class Pipeline(ABC):
             for i in idx
         }
         stored = []
+        object_array_paths = []
 
         # checkpoint each array
         for i in idx:
@@ -248,12 +249,14 @@ class Pipeline(ABC):
                             url=self.store.path,
                             component=path,
                             compute=False,
+                            overwrite=True,
                             object_codec=numcodecs.Pickle(),
                         )
                     )
                     if is_object:
-                        stored.append(self.fix_object_array(path, stored[-1]))
+                        object_array_paths.append(path)
         _, attrs = dask.compute(stored, results)
+        self.fix_object_arrays(object_array_paths)
 
         # fix object arrays
 
@@ -273,49 +276,70 @@ class Pipeline(ABC):
             )
         return
 
-    @dask.delayed
-    def fix_object_array(self, path, old_store=None):
-        tokens = path.split("/")
-        dir, name = "/".join(tokens[:-1]), tokens[-1]
-        assert name[0] == "_"
+    def fix_object_arrays(self, paths):
+        dirs, names = [], []
+        shapes, dtypes, arrays = [], [], []
+        for path in paths:
+            tokens = path.split("/")
+            dir, name = "/".join(tokens[:-1]), tokens[-1]
+            assert name[0] == "_"
+            dirs.append(dir)
+            names.append(name)
 
-        array = da.from_zarr(self.load(path))
-        array = array.rechunk([1] * len(array.shape))
-        shape, dtype = chunk.chunk(
-            lambda x: [x.item().shape, x.item().dtype],
-            [array],
-            output_dataset_dtypes=[object, object],
-        )
-        shape, dtype = dask.compute(shape, dtype)
-        dtype = set(dtype.flatten().tolist())
-        assert len(dtype) == 1
-        dtype = dtype.pop()
+            array = da.from_zarr(self.load(path))
+            array = array.rechunk([1] * len(array.shape))
+            shape, dtype = chunk.chunk(
+                lambda x: [x.item().shape, x.item().dtype],
+                [array],
+                output_dataset_dtypes=[object, object],
+            )
+            shapes.append(shape)
+            dtypes.append(dtype)
+            arrays.append(array)
+        shapes, dtypes = dask.compute(shapes, dtypes)
 
-        chunks = [[np.nan] * x for x in array.shape]
-        for chunk_idx in itertools.product(*[range(len(x)) for x in chunks]):
-            for dim, dim_idx in enumerate(chunk_idx):
-                computed_shape = shape[chunk_idx][dim]
-                if np.isnan(chunks[dim][dim_idx]):
-                    chunks[dim][dim_idx] = computed_shape
-                else:
-                    # asserts that chunk size matches known values
-                    assert chunks[dim][dim_idx] == computed_shape
-        chunks = tuple([tuple(x) for x in chunks])
-        reconstructed = da.map_blocks(
-            lambda x: x.item(),
-            array,
-            dtype=dtype,
-            chunks=chunks,
-            name="reconstruct_unknown",
-        ).rechunk()  # normalize chunks
-        # NOTE: object_arrays will have no chunks attr
+        for i in range(len(paths)):
+            dtype = set(dtypes[i].flatten().tolist())
+            assert len(dtype) == 1
+            dtypes[i] = dtype.pop()
 
-        return da.to_zarr(
-            reconstructed,
-            url=self.store.path,
-            component=os.path.join(dir, name[1:]),
-            compute=True,
-        )
+        stored = []
+        for i in range(len(paths)):
+            chunks = [[np.nan] * x for x in arrays[i].shape]
+            for chunk_idx in itertools.product(*[range(len(x)) for x in chunks]):
+                for dim, dim_idx in enumerate(chunk_idx):
+                    computed_shape = shapes[i][chunk_idx][dim]
+                    if np.isnan(chunks[dim][dim_idx]):
+                        chunks[dim][dim_idx] = computed_shape
+                    else:
+                        # asserts that chunk size matches known values
+                        assert chunks[dim][dim_idx] == computed_shape
+            chunks = tuple([tuple(x) for x in chunks])
+            if len(chunks[0]) > 100:
+                __import__("pdb").set_trace()
+            print(chunks)
+            reconstructed = da.map_blocks(
+                lambda x: x.item(),
+                arrays[i],
+                dtype=dtypes[i],
+                chunks=chunks,
+                name="reconstruct_unknown",
+            ).rechunk()
+            print(reconstructed.chunks)
+            print("===")
+            # NOTE: object_arrays will have no chunks attr
+
+            stored.append(
+                da.to_zarr(
+                    reconstructed,
+                    url=self.store.path,
+                    component=os.path.join(dirs[i], names[i][1:]),
+                    compute=False,
+                    overwrite=True,
+                )
+            )
+        # NOTE: Waiting for https://github.com/dask/dask/issues/8570 to be resolved
+        return dask.compute(stored, optimize_graph=False)
 
     def load(self, source):
         tokens = source.split("/")

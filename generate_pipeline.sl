@@ -2,8 +2,8 @@
 #SBATCH --job-name=generate-pipeline # Job name
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task 5 # 1 cpu on single node
-#SBATCH --mem=10gb # Job memory request
+#SBATCH --cpus-per-task 48 # 1 cpu on single node
+#SBATCH --mem=190gb # Job memory request
 #SBATCH --time=120:00:00 # Time limit hrs:min:sec
 #SBATCH --mail-type=BEGIN,END,FAIL. # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=adhinart@bc.edu # Where to send mail
@@ -21,4 +21,4 @@ hostname
 
 
 cd /mmfs1/data/adhinart/dendrite
-/data/adhinart/.conda/envs/clean_dendrite/bin/python -m chunk_pipeline.main --pipeline DendritePipeline --config seg_den.py
+/data/adhinart/.conda/envs/clean_dendrite/bin/python -m chunk_pipeline.main --pipeline DendritePipeline --config human.py

@@ -1,10 +1,12 @@
 import numpy as np
 import math
 
-DASK_CONFIG = {
-    "array.slicing.split_large_chunks": False,
-    "distributed.scheduler.worker-ttl": None,
-}  # prevent GIL holding processes from crashing workers
+# set in ~/.config/dask
+# DASK_CONFIG = {
+# "array.slicing.split_large_chunks": False,
+# }  # prevent GIL holding processes from crashing workers
+
+# "distributed.scheduler.worker-ttl": None,
 # "distributed.comm.timeouts.connect": "300s",
 # worker-ttl:
 # dask.config.set({"admin.tick.limit": "1h"})
@@ -101,17 +103,17 @@ SLURM__CORES_PER_JOB = 48
 # multiprocess to release GIL
 SLURM__NUM_PROCESSES_PER_JOB = 3
 # in GiB
-SLURM__MEMORY_PER_JOB = 240
+SLURM__MEMORY_PER_JOB = 190
 # get this by running fil-profile run debug.py (max memory used by a task)
 SLURM__MEMORY_PER_TASK = 8  # to calculate number of threads per job
-SLURM__WALLTIME = "120:00:00"
+SLURM__WALLTIME = "24:00:00"
 SLURM__MIN_JOBS = 20
 # Local directory has to be unique for each job
 # random hex is to guarantee unique directory name
 # SLURM__LOCAL_DIRECTORY = "/tmp/chunk_pipeline/$(openssl rand -hex 5)" # tmp supposedly gets cleared
-SLURM__LOCAL_DIRECTORY = (
-    "/scratch/adhinart/chunk_pipeline/$SLURM_JOB_ID"  # scratch locks NFS
-)
-# SLURM__LOCAL_DIRECTORY = "/local/adhinart/chunk_pipeline"  # assuming only a single job is placed on each node
-SLURM__DASHBOARD_PORT = 8888
+# SLURM__LOCAL_DIRECTORY = (
+#     "/scratch/adhinart/chunk_pipeline/$SLURM_JOB_ID"  # scratch locks NFS
+# )
+SLURM__LOCAL_DIRECTORY = "/local/adhinart/chunk_pipeline"  # assuming only a single job is placed on each node
+SLURM__DASHBOARD_PORT = 8989
 SLURM__INTERFACE = "ib0"
