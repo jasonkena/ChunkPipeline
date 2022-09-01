@@ -5,7 +5,12 @@ import chunk_pipeline
 import chunk_pipeline.pipelines as pipelines
 from chunk_pipeline.configs import Config
 
+import sys
+import logging
+
 if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+
     parser = argparse.ArgumentParser(description="Run pipeline")
     parser.add_argument(
         "--config",
@@ -15,7 +20,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--pipeline", nargs=1, help="Pipeline to run")
     args = parser.parse_args()
-    print(args)
+    logging.info(args)
     if args.pipeline is None:
         raise ValueError("No pipeline specified")
 

@@ -1,6 +1,7 @@
 import numpy as np
 import edt
 import h5py
+from scipy import ndimage
 import torch
 import torch.nn.functional as F
 import math
@@ -17,16 +18,25 @@ import dask
 
 
 def _chunk_get_boundary(vol):
-    vol = torch.from_numpy(vol > 0)
-    # pad to guarantee that boundary inputs are also padded
-    padded_vol = F.pad(vol, (1, 1, 1, 1, 1, 1))
-    boundary = (
-        F.max_pool3d(
-            (~padded_vol.unsqueeze(0)).float(), kernel_size=3, stride=1
-        ).squeeze(0)
-        > 0
-    )
-    return [boundary.numpy()]
+    return [
+        ndimage.morphology.binary_dilation(
+            ~np.pad(vol, ((1, 1), (1, 1), (1, 1))), structure=np.ones((3, 3, 3))
+        )[1:-1, 1:-1, 1:-1]
+    ]
+
+
+# def _chunk_get_boundary(vol):
+#     vol = torch.from_numpy(vol > 0)
+#     # pad to guarantee that boundary inputs are also padded
+#     padded_vol = F.pad(vol, (1, 1, 1, 1, 1, 1))
+#     boundary = (
+#         F.max_pool3d(
+#             (~padded_vol.unsqueeze(0)).float(), kernel_size=3, stride=1
+#         ).squeeze(0)
+#         > 0
+#     )
+#     return [boundary.numpy()]
+#
 
 
 def get_boundary(vol):

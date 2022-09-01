@@ -15,6 +15,8 @@ import dask.dataframe as df
 
 from chunk_pipeline.utils import object_array
 
+import logging
+
 
 def index_ragged(vol, idx, object_dtype=False):
     # assuming 1d input
@@ -357,7 +359,7 @@ def compute_remapping(uf_add, uf_union, partial_statistics, vol_shape, k):
 
         is_valid = idx[:, 3] < index_ragged(voxel_statistics, lambda x: x.shape[0])
         if not np.all(is_valid):
-            print("IndexError in voxel_counts")
+            logging.warning("IndexError in voxel_counts")
         new_counts = index_ragged(voxel_statistics[is_valid], idx[is_valid][:, 3])
         voxel_counts[i] += np.sum(new_counts)
 

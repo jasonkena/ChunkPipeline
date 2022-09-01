@@ -18,6 +18,8 @@ from chunk_pipeline.configs import Config
 import zarr
 import numcodecs
 
+import logging
+
 # https://stackoverflow.com/questions/952914/how-do-i-make-a-flat-list-out-of-a-list-of-lists
 def flatten(l):
     return [item for sublist in l for item in sublist]
@@ -27,63 +29,14 @@ def to_tuple(l):
     return tuple(tuple(sublist) for sublist in l)
 
 
-def parallelize(func):
-    def wrapper(self, *args, **kwargs):
-        slurm = self.cfg["SLURM"]
-        misc = self.cfg["MISC"]
-
-        # # dask.config.set(scheduler='single-threaded')
-        # from dask_memusage import install
-        # cluster = LocalCluster(n_workers=10, threads_per_worker=1,
-        #                memory_limit=None)
-        # install(cluster.scheduler, misc["MEMUSAGE_PATH"])  # <-- INSTALL
-        # client = Client(cluster)
-        # print(cluster.dashboard_link)
-        # return func(self, *args, **kwargs)
-        #
-        if (slurm_exists := shutil.which("sbatch")) is None:
-            print("SLURM not available, falling back to LocalCluster")
-
-        with SLURMCluster(
-            job_name=slurm["PROJECT_NAME"],
-            queue=slurm["PARTITIONS"],
-            cores=slurm["CORES_PER_JOB"],
-            memory=f"{slurm['MEMORY_PER_JOB']}GiB",
-            scheduler_options={"dashboard_address": f":{slurm['DASHBOARD_PORT']}"},
-            walltime=slurm["WALLTIME"],
-            interface=slurm["INTERFACE"],
-            worker_extra_args=[
-                "--nworkers",
-                str(slurm["NUM_PROCESSES_PER_JOB"]),
-                "--nthreads",
-                str(
-                    int(
-                        slurm["MEMORY_PER_JOB"]
-                        / (slurm["NUM_PROCESSES_PER_JOB"] * slurm["MEMORY_PER_TASK"])
-                    )
-                ),
-                f'--memory-limit="'
-                + str(int(slurm["MEMORY_PER_JOB"] / slurm["NUM_PROCESSES_PER_JOB"]))
-                + 'GiB"',
-                "--local-directory",
-                slurm["LOCAL_DIRECTORY"],
-            ],
-        ) if slurm_exists else LocalCluster() as cluster, Client(cluster) as client:
-
-            print(cluster.dashboard_link)
-            # print(cluster.job_script())
-            if slurm_exists:
-                print(
-                    "Asking for {} cores, {} GiB of memory, {} processes per job on SLURM".format(
-                        slurm["CORES_PER_JOB"],
-                        slurm["MEMORY_PER_JOB"],
-                        slurm["NUM_PROCESSES_PER_JOB"],
-                    )
-                )
-                cluster.scale(jobs=slurm["MIN_JOBS"])
-            return func(self, *args, **kwargs)
-
-    return wrapper
+#
+# def parallelize(func):
+#     def wrapper(self, *args, **kwargs):
+#                 # cluster.scale(jobs=slurm["MIN_JOBS"])
+#             return func(self, *args, **kwargs)
+#
+#     return wrapper
+#
 
 
 def iterdict(cfg, base_cfg=None):
@@ -109,7 +62,7 @@ class Pipeline(ABC):
         base_group = zarr.group(store=self.store)
         if "_config" in base_group:
             if cfg != base_group["_config"][0]:
-                print("Config has changed, overwriting old config")
+                logging.info("Config has changed, overwriting old config")
 
         base_group.create_dataset(
             "_config",
@@ -117,6 +70,81 @@ class Pipeline(ABC):
             object_codec=numcodecs.Pickle(),
             overwrite=True,
         )
+
+        slurm = self.cfg["SLURM"]
+        misc = self.cfg["MISC"]
+
+        # # dask.config.set(scheduler='single-threaded')
+        # from dask_memusage import install
+        # cluster = LocalCluster(n_workers=10, threads_per_worker=1,
+        #                memory_limit=None)
+        # install(cluster.scheduler, misc["MEMUSAGE_PATH"])  # <-- INSTALL
+        # client = Client(cluster)
+        # print(cluster.dashboard_link)
+        # return func(self, *args, **kwargs)
+        #
+        if (slurm_exists := shutil.which("sbatch")) is None:
+            logging.info("SLURM not available, falling back to LocalCluster")
+
+        cluster = (
+            SLURMCluster(
+                job_name=slurm["PROJECT_NAME"],
+                queue=slurm["PARTITIONS"],
+                cores=slurm["CORES_PER_JOB"],
+                memory=f"{slurm['MEMORY_PER_JOB']}GiB",
+                scheduler_options={
+                    "dashboard_address": f":{slurm['DASHBOARD_PORT']}",
+                    "interface": "ib0",
+                },
+                walltime=f"{slurm['WALLTIME']}:00:00",
+                processes=slurm["NUM_PROCESSES_PER_JOB"],
+                # interface=slurm["INTERFACE"],
+                worker_extra_args=[
+                    "--interface",
+                    slurm["INTERFACE"],
+                    "--nthreads",
+                    str(
+                        int(
+                            slurm["MEMORY_PER_JOB"]
+                            / (
+                                slurm["NUM_PROCESSES_PER_JOB"]
+                                * slurm["MEMORY_PER_TASK"]
+                            )
+                        )
+                    ),
+                    f'--memory-limit="'
+                    + str(int(slurm["MEMORY_PER_JOB"] / slurm["NUM_PROCESSES_PER_JOB"]))
+                    + 'GiB"',
+                    "--local-directory",
+                    slurm["LOCAL_DIRECTORY"],
+                    "--lifetime",
+                    f"{slurm['WALLTIME']*60-5}m",
+                    "--lifetime-stagger",
+                    "4m",
+                ],
+                log_directory=slurm["LOG_DIRECTORY"],
+            )
+            if slurm_exists
+            else LocalCluster()
+        )
+        client = Client(cluster)
+
+        logging.info(cluster.dashboard_link)
+        # print(cluster.job_script())
+        if slurm_exists:
+            logging.info(
+                "Asking for {} cores, {} GiB of memory, {} processes per job on SLURM".format(
+                    slurm["CORES_PER_JOB"],
+                    slurm["MEMORY_PER_JOB"],
+                    slurm["NUM_PROCESSES_PER_JOB"],
+                )
+            )
+            cluster.adapt(
+                minimum=slurm["MIN_JOBS"] * slurm["NUM_PROCESSES_PER_JOB"],
+                maximum=slurm["MAX_JOBS"] * slurm["NUM_PROCESSES_PER_JOB"],
+                worker_key=lambda state: state.address.split(":")[0],
+                interval=slurm["ADAPT_INTERVAL"],
+            )
 
     def add(self, func, path, cfg_groups=[], depends_on=[], checkpoint=True):
         # path here is the zarr groups path
@@ -167,19 +195,19 @@ class Pipeline(ABC):
                     if f"_{key}" in result:
                         chunks = result.pop(f"_{key}")
                     else:
-                        print(f"chunks missing in {key}, assuming object_array")
+                        logging.info(f"chunks missing in {key}, assuming object_array")
                         chunks = None
                     result[key] = da.from_zarr(group[key], chunks=chunks)
             return False, result
 
         else:
             if "_implicit_cfg" in group:
-                print(f"implicit_cfg has changed, will clear {group.path}")
+                logging.info(f"implicit_cfg has changed, will clear {group.path}")
             result = task["func"](inner_cfg, *args, **kwargs)
             assert isinstance(result, dict)
             return task["checkpoint"], result
 
-    @parallelize
+    # @parallelize
     def compute(self, task_uids=None):
         # if task_uids is None, compute all tasks
         if task_uids is None:
@@ -207,7 +235,7 @@ class Pipeline(ABC):
 
         self.checkpoint(results, needs_checkpoint)
 
-        print("Computed all tasks")
+        logging.info("Computed all tasks")
         return results
 
     def checkpoint(self, original_results, idx):
@@ -231,7 +259,7 @@ class Pipeline(ABC):
                         value = chunk.chunk(lambda x: [x], [value], [object])
                         is_object = True
                     if not da.core._check_regular_chunks(value.chunks):
-                        print(f"{key} has irregular chunks; please rechunk")
+                        logging.warning(f"{key} has irregular chunks; please rechunk")
                         value = da.rechunk(
                             value,
                             chunks=(self.cfg["GENERAL"]["CHUNK_SIZE"][0],)
@@ -255,7 +283,13 @@ class Pipeline(ABC):
                     )
                     if is_object:
                         object_array_paths.append(path)
-        _, attrs = dask.compute(stored, results)
+        from time import time
+
+        start = time()
+        logging.debug("starting optimization")
+        stored, results = dask.optimize(stored, results)
+        logging.debug(f"optimized in {time() - start}")
+        _, attrs = dask.compute(stored, results, optimize_graph=False)
         self.fix_object_arrays(object_array_paths)
 
         # fix object arrays
@@ -315,9 +349,6 @@ class Pipeline(ABC):
                         # asserts that chunk size matches known values
                         assert chunks[dim][dim_idx] == computed_shape
             chunks = tuple([tuple(x) for x in chunks])
-            if len(chunks[0]) > 100:
-                __import__("pdb").set_trace()
-            print(chunks)
             reconstructed = da.map_blocks(
                 lambda x: x.item(),
                 arrays[i],
@@ -325,8 +356,6 @@ class Pipeline(ABC):
                 chunks=chunks,
                 name="reconstruct_unknown",
             ).rechunk()
-            print(reconstructed.chunks)
-            print("===")
             # NOTE: object_arrays will have no chunks attr
 
             stored.append(
@@ -338,8 +367,7 @@ class Pipeline(ABC):
                     overwrite=True,
                 )
             )
-        # NOTE: Waiting for https://github.com/dask/dask/issues/8570 to be resolved
-        return dask.compute(stored, optimize_graph=False)
+        return dask.compute(stored)
 
     def load(self, source):
         tokens = source.split("/")
@@ -379,7 +407,7 @@ class Pipeline(ABC):
                 zarr.copy(source, group, name)
             else:
                 group.create_dataset(name, data=source, object_codec=numcodecs.Pickle())
-        print("Exported finished")
+        logging.info("Export finished")
 
     @abstractmethod
     def run(self):

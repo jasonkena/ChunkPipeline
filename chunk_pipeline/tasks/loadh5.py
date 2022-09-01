@@ -13,5 +13,8 @@ def task_load_h5(cfg):
     result = {}
     for key, (file, dataset) in h5.items():
         dataset = h5py.File(file, "r").get(dataset)
-        result[key] = da.from_array(dataset, chunks=general["CHUNK_SIZE"])
+        # first use chunks from original h5py (for fast chunk loading), then rechunk to match desired chunks
+        result[key] = da.from_array(dataset, chunks=dataset.chunks).rechunk(
+            general["CHUNK_SIZE"]
+        )
     return result

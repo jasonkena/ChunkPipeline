@@ -9,7 +9,7 @@ import chunk_pipeline.tasks.sphere as sphere
 from chunk_pipeline.tasks.sphere import get_boundary
 
 
-def _chunk_zyx_idx(vol, row, uint_dtype, block_info):
+def _chunk_zyx_idx(vol, uint_dtype, block_info):
     # compute zyx_idx in a chunkwise manner since da.arange broadcasting leads to memory errors on rechunking
     location = block_info[0]["array-location"]
     location = [x[0] for x in location]
@@ -20,9 +20,10 @@ def _chunk_zyx_idx(vol, row, uint_dtype, block_info):
             np.arange(location[i], location[i] + vol.shape[i], dtype=uint_dtype)
             for i in range(3)
         ],
-        indexing="ij"
+        indexing="ij",
+        copy=False
     )
-    return [z + row[1], y + row[3], x + row[5]]
+    return [z, y, x]
 
 
 def chunk_zyx_idx(shape, row, chunk_size, uint_dtype):
@@ -33,10 +34,9 @@ def chunk_zyx_idx(shape, row, chunk_size, uint_dtype):
         _chunk_zyx_idx,
         [temp],
         output_dataset_dtypes=[int, int, int],
-        row=row,
         uint_dtype=uint_dtype,
     )
-    return z, y, x
+    return z + row[1], y + row[3], x + row[5]
 
 
 def chunk_idx(mask, array):

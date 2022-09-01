@@ -103,11 +103,14 @@ SLURM__CORES_PER_JOB = 48
 # multiprocess to release GIL
 SLURM__NUM_PROCESSES_PER_JOB = 3
 # in GiB
-SLURM__MEMORY_PER_JOB = 190
+SLURM__MEMORY_PER_JOB = 170
 # get this by running fil-profile run debug.py (max memory used by a task)
 SLURM__MEMORY_PER_TASK = 8  # to calculate number of threads per job
-SLURM__WALLTIME = "24:00:00"
-SLURM__MIN_JOBS = 20
+# in hours
+SLURM__WALLTIME = 2
+SLURM__MIN_JOBS = 0
+SLURM__MAX_JOBS = 20
+SLURM__ADAPT_INTERVAL = "60s"  # wait 10 seconds before scaling
 # Local directory has to be unique for each job
 # random hex is to guarantee unique directory name
 # SLURM__LOCAL_DIRECTORY = "/tmp/chunk_pipeline/$(openssl rand -hex 5)" # tmp supposedly gets cleared
@@ -116,4 +119,5 @@ SLURM__MIN_JOBS = 20
 # )
 SLURM__LOCAL_DIRECTORY = "/local/adhinart/chunk_pipeline"  # assuming only a single job is placed on each node
 SLURM__DASHBOARD_PORT = 8989
+SLURM__LOG_DIRECTORY = "/mmfs1/data/adhinart/dendrite/logs"  # assuming only a single job is placed on each node
 SLURM__INTERFACE = "ib0"
