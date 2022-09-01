@@ -31,22 +31,23 @@ def index_ragged(vol, idx, object_dtype=False):
     return np.array(result)
 
 
-def partial_func(func):
-    def inner_partial_func(*args, block_info=None, **kwargs):
-        if "block_info" in [
-            x.name for x in inspect.signature(func).parameters.values()
-        ]:
-            temp = func(*args, **kwargs, block_info=block_info)
-        else:
-            temp = func(*args, **kwargs)
-        result = object_array(temp)
-        result = result.reshape(
-            *[1 for _ in range(len(block_info[0]["num-chunks"]))], -1
-        )
+def partial_func(func, ndim):
+    def _postprocess(result):
+        result = object_array(result)
+        result = result.reshape(*[1 for _ in range(ndim)], -1)
 
         return result
 
-    return inner_partial_func
+    def _inner_partial(*args, **kwargs):
+        return _postprocess(func(*args, **kwargs))
+
+    def _inner_partial_block(*args, block_info=None, **kwargs):
+        return _postprocess(func(*args, **kwargs, block_info=block_info))
+
+    if "block_info" in [x.name for x in inspect.signature(func).parameters.values()]:
+        return _inner_partial_block
+    else:
+        return _inner_partial
 
 
 def chunk(
@@ -134,7 +135,9 @@ def chunk(
     # if overwrite_kwargs:
     #     kwargs = overwrite_kwargs(kwargs)
     # [z, y, x, num_outputs]
-    output = da.map_blocks(partial_func(func), *input_datasets, **kwargs)
+    output = da.map_blocks(
+        partial_func(func, input_datasets[0].ndim), *input_datasets, **kwargs
+    )
 
     final = []
     for idx, dtype in enumerate(output_dataset_dtypes):
