@@ -2,13 +2,14 @@ import os
 import shutil
 from abc import ABC, abstractmethod
 import itertools
+import pdb
 
 import numpy as np
 
 import dask
 import dask.array as da
 from dask_jobqueue import SLURMCluster
-from dask.distributed import Client, LocalCluster, wait
+from dask.distributed import Client, LocalCluster, as_completed
 from dask.graph_manipulation import bind
 
 import chunk_pipeline.tasks.chunk as chunk
@@ -86,12 +87,12 @@ class Pipeline(ABC):
         if (slurm_exists := shutil.which("sbatch")) is None:
             logging.info("SLURM not available, falling back to LocalCluster")
 
-        cluster = (
+        self.cluster = (
             SLURMCluster(
                 job_name=slurm["PROJECT_NAME"],
                 queue=slurm["PARTITIONS"],
                 cores=slurm["CORES_PER_JOB"],
-                memory=f"{slurm['MEMORY_PER_JOB']}GiB",
+                memory=0,  # with --exclusive, this allocates all memory on node
                 scheduler_options={
                     "dashboard_address": f":{slurm['DASHBOARD_PORT']}",
                     "interface": "ib0",
@@ -112,9 +113,10 @@ class Pipeline(ABC):
                             )
                         )
                     ),
-                    f'--memory-limit="'
-                    + str(int(slurm["MEMORY_PER_JOB"] / slurm["NUM_PROCESSES_PER_JOB"]))
-                    + 'GiB"',
+                    # auto compute memory
+                    # f'--memory-limit="'
+                    # + str(int(slurm["MEMORY_PER_JOB"] / slurm["NUM_PROCESSES_PER_JOB"]))
+                    # + 'GiB"',
                     "--local-directory",
                     slurm["LOCAL_DIRECTORY"],
                     "--lifetime",
@@ -123,13 +125,15 @@ class Pipeline(ABC):
                     "4m",
                 ],
                 log_directory=slurm["LOG_DIRECTORY"],
+                # allocate all CPUs and run only one job per node
+                job_extra_directives=["--exclusive"],
             )
             if slurm_exists
             else LocalCluster()
         )
-        client = Client(cluster)
+        self.client = Client(self.cluster)
 
-        logging.info(cluster.dashboard_link)
+        logging.info(self.cluster.dashboard_link)
         # print(cluster.job_script())
         if slurm_exists:
             logging.info(
@@ -139,7 +143,7 @@ class Pipeline(ABC):
                     slurm["NUM_PROCESSES_PER_JOB"],
                 )
             )
-            cluster.adapt(
+            self.cluster.adapt(
                 minimum=slurm["MIN_JOBS"] * slurm["NUM_PROCESSES_PER_JOB"],
                 maximum=slurm["MAX_JOBS"] * slurm["NUM_PROCESSES_PER_JOB"],
                 worker_key=lambda state: state.address.split(":")[0],
@@ -206,6 +210,22 @@ class Pipeline(ABC):
             result = task["func"](inner_cfg, *args, **kwargs)
             assert isinstance(result, dict)
             return task["checkpoint"], result
+
+    def debug_compute(self, *args, **kwargs):
+
+        # futures = self.client.compute(args, **kwargs)
+        # results = []
+        # for future in as_completed(futures):
+        #     if future.status == "error":
+        #         logging.error(repr(future.exception()))
+        #         # logging.error("Error raised, dropping into pdb")
+        #         # pdb.runcall(self.client.recreate_error_locally, future)
+        #         # raise future.exception()
+        #     else:
+        #         results.append(future.result())
+        # if len(results) != len(args):
+        #     breakpoint()
+        return dask.compute(*args)
 
     # @parallelize
     def compute(self, task_uids=None):
@@ -277,19 +297,14 @@ class Pipeline(ABC):
                             url=self.store.path,
                             component=path,
                             compute=False,
-                            overwrite=True,
+                            # overwrite=True,
                             object_codec=numcodecs.Pickle(),
                         )
                     )
                     if is_object:
                         object_array_paths.append(path)
-        from time import time
 
-        start = time()
-        logging.debug("starting optimization")
-        stored, results = dask.optimize(stored, results)
-        logging.debug(f"optimized in {time() - start}")
-        _, attrs = dask.compute(stored, results, optimize_graph=False)
+        _, attrs = self.debug_compute(stored, results)
         self.fix_object_arrays(object_array_paths)
 
         # fix object arrays
@@ -330,7 +345,7 @@ class Pipeline(ABC):
             shapes.append(shape)
             dtypes.append(dtype)
             arrays.append(array)
-        shapes, dtypes = dask.compute(shapes, dtypes)
+        shapes, dtypes = self.debug_compute(shapes, dtypes)
 
         for i in range(len(paths)):
             dtype = set(dtypes[i].flatten().tolist())
@@ -364,10 +379,10 @@ class Pipeline(ABC):
                     url=self.store.path,
                     component=os.path.join(dirs[i], names[i][1:]),
                     compute=False,
-                    overwrite=True,
+                    # overwrite=True,
                 )
             )
-        return dask.compute(stored)
+        return self.debug_compute(stored)
 
     def load(self, source):
         tokens = source.split("/")
