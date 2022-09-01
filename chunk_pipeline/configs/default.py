@@ -103,7 +103,7 @@ SLURM__CORES_PER_JOB = 48
 # multiprocess to release GIL
 SLURM__NUM_PROCESSES_PER_JOB = 3
 # in GiB
-SLURM__MEMORY_PER_JOB = 170
+SLURM__MEMORY_PER_JOB = 170  # used only to compute number of threads
 # get this by running fil-profile run debug.py (max memory used by a task)
 SLURM__MEMORY_PER_TASK = 8  # to calculate number of threads per job
 # in hours

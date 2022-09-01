@@ -5,12 +5,11 @@ import chunk_pipeline
 import chunk_pipeline.pipelines as pipelines
 from chunk_pipeline.configs import Config
 
+import os
 import sys
 import logging
 
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-
     parser = argparse.ArgumentParser(description="Run pipeline")
     parser.add_argument(
         "--config",
@@ -27,6 +26,17 @@ if __name__ == "__main__":
     cfg = Config(os.path.join(os.path.dirname(chunk_pipeline.__file__), "configs"))
     for file in ["default.py"] + args.config:
         cfg.from_pyfile(file)
+
+    logging.root.handlers = []
+    logging.basicConfig(
+        level=logging.DEBUG,
+        handlers=[
+            logging.FileHandler(
+                os.path.join(cfg["SLURM"]["LOG_DIRECTORY"], "main.out")
+            ),
+            logging.StreamHandler(),
+        ],
+    )
 
     pipeline = getattr(pipelines, args.pipeline[0])
     pipeline = pipeline(cfg)
