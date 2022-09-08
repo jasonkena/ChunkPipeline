@@ -16,11 +16,14 @@ import chunk_pipeline.tasks.point as point
 
 # point
 location = [1, 2, 3]
-shape = [512, 512, 512]
-# dtype = int
-dtype = np.uint16
+shape = [512] * 3
+dtype = int
+# dtype = np.uint16
 
 z, y, x = np.meshgrid(
     *[np.arange(location[i], location[i] + shape[i], dtype=dtype) for i in range(3)],
-    indexing="ij"
+    indexing="ij", copy=False
 )
+z+1
+y+1
+x+1

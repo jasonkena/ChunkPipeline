@@ -38,6 +38,8 @@ if __name__ == "__main__":
         ],
     )
 
+    # os.system('rm -rf "%s"' % cfg["SLURM"]["DELETE_LOCAL_DIRECTORY"])
+
     pipeline = getattr(pipelines, args.pipeline[0])
     pipeline = pipeline(cfg)
 

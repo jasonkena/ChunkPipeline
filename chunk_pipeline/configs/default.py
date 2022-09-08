@@ -105,19 +105,22 @@ SLURM__NUM_PROCESSES_PER_JOB = 3
 # in GiB
 SLURM__MEMORY_PER_JOB = 170  # used only to compute number of threads
 # get this by running fil-profile run debug.py (max memory used by a task)
-SLURM__MEMORY_PER_TASK = 8  # to calculate number of threads per job
+SLURM__MEMORY_PER_TASK = 4  # to calculate number of threads per job
+
 # in hours
 SLURM__WALLTIME = 2
-SLURM__MIN_JOBS = 0
+SLURM__MIN_JOBS = 1
 SLURM__MAX_JOBS = 20
-SLURM__ADAPT_INTERVAL = "60s"  # wait 10 seconds before scaling
+SLURM__ADAPT_INTERVAL = "10s"  # wait 10 seconds before scaling
 # Local directory has to be unique for each job
 # random hex is to guarantee unique directory name
 # SLURM__LOCAL_DIRECTORY = "/tmp/chunk_pipeline/$(openssl rand -hex 5)" # tmp supposedly gets cleared
-# SLURM__LOCAL_DIRECTORY = (
-#     "/scratch/adhinart/chunk_pipeline/$SLURM_JOB_ID"  # scratch locks NFS
-# )
-SLURM__LOCAL_DIRECTORY = "/local/adhinart/chunk_pipeline"  # assuming only a single job is placed on each node
+SLURM__DELETE_LOCAL_DIRECTORY = "/scratch/adhinart/chunk_pipeline"
+SLURM__LOCAL_DIRECTORY = (
+    "/scratch/adhinart/chunk_pipeline/$SLURM_JOB_ID"  # scratch locks NFS
+)
+# local does not always have enough storage
+# SLURM__LOCAL_DIRECTORY = "/local/adhinart/chunk_pipeline"  # assuming only a single job is placed on each node
 SLURM__DASHBOARD_PORT = 8989
 SLURM__LOG_DIRECTORY = "/mmfs1/data/adhinart/dendrite/logs"  # assuming only a single job is placed on each node
 SLURM__INTERFACE = "ib0"

@@ -37,6 +37,7 @@ class DendritePipeline(Pipeline):
                     depends_on=[bbox, h5],
                 )
             )
+        self.compute()
         skeletons = []
         for i in range(n):
             skeletons.append(
@@ -47,12 +48,14 @@ class DendritePipeline(Pipeline):
                     depends_on=[extracted[i]],
                 )
             )
+        self.compute()
 
         point_clouds = []
-        for i in [5]:
-            # for i in [34]:
-            # for i in [13]:
-            # for i in range(n):
+        # for i in [0]:
+        # for i in [34]:
+        # for i in [13]:
+        # for i in [22]:
+        for i in range(n):
             point_clouds.append(
                 self.add(
                     task_generate_point_cloud,

@@ -12,10 +12,13 @@ from unionfind import UnionFind
 import dask
 import dask.array as da
 import dask.dataframe as df
+from distributed import get_client, get_worker
 
-from chunk_pipeline.utils import object_array
+from chunk_pipeline.utils import object_array, publish, normalize_dataset
 
 import logging
+
+import gc
 
 
 def index_ragged(vol, idx, object_dtype=False):
@@ -587,30 +590,75 @@ def chunk_downsample(vol, chunk_width, anisotropy):
 
 
 def _chunk_seed_groupby(dataframe, chunk_size, dtype):
-    # compute as dask array instead of np to avoid memory issues
-    vol = da.zeros(math.prod(chunk_size), dtype=dtype)
+    client = get_client()
+
+    # breaks if np.zeros is used instead
+    # raises "TypeError('string indices must be integers')"
+    vol = np.zeros(math.prod(chunk_size), dtype=dtype)
     z, y, x = [dataframe[v] for v in ["rel_z", "rel_y", "rel_x"]]
     z, y, x = [np.array(v).astype(int) for v in [z, y, x]]
     idx = z * chunk_size[1] * chunk_size[2] + y * chunk_size[2] + x
     vol[idx] = np.array(dataframe["value"])
     vol = vol.reshape(chunk_size)
-    return pd.DataFrame({"obj": [vol]}, index=[0])
+    # vol = da.from_array(vol, chunks=chunk_size)
+
+    name = publish("chunk_seed_groupby", vol)
+
+    return pd.DataFrame({"obj": [name]}, index=[0])
 
 
 @dask.delayed
 def _chunk_seed_write(shape, chunk_size, dataframe, dtype):
-    vol = da.zeros(shape, chunks=chunk_size, dtype=dtype)
+    client = get_client()
+    blank = da.zeros(shape, dtype=dtype, chunks=chunk_size).blocks
+    blocks = []
+    for i in range(blank.shape[0]):
+        i_blocks = []
+        for j in range(blank.shape[1]):
+            j_blocks = []
+            for k in range(blank.shape[2]):
+                j_blocks.append(blank[i, j, k])
+            i_blocks.append(j_blocks)
+        blocks.append(i_blocks)
+
     objs = list(dataframe["obj"])
     for i, (z, y, x, _) in enumerate(dataframe.index):
-        z0 = z * chunk_size[0]
-        y0 = y * chunk_size[1]
-        x0 = x * chunk_size[2]
-        z1 = min(z0 + chunk_size[0], shape[0])
-        y1 = min(y0 + chunk_size[1], shape[1])
-        x1 = min(x0 + chunk_size[2], shape[2])
+        blocks[z][y][x] = client.get_dataset(objs[i])[
+            : blocks[z][y][x].shape[0],
+            : blocks[z][y][x].shape[1],
+            : blocks[z][y][x].shape[2],
+        ]
+        client.unpublish_dataset(objs[i])
 
-        vol[z0:z1, y0:y1, x0:x1] = objs[i][: z1 - z0, : y1 - y0, : x1 - x0]
-    return vol
+    result = da.block(blocks)
+
+    name = publish("new_chunk_seed_write", result, persist=True)
+    return name
+
+
+# @dask.delayed
+# def _chunk_seed_write(shape, chunk_size, dataframe, dtype):
+#     client = get_client()
+#
+#     vol = da.zeros(shape, chunks=chunk_size, dtype=dtype)
+#     objs = list(dataframe["obj"])
+#     for i, (z, y, x, _) in enumerate(dataframe.index):
+#         z0 = z * chunk_size[0]
+#         y0 = y * chunk_size[1]
+#         x0 = x * chunk_size[2]
+#         z1 = min(z0 + chunk_size[0], shape[0])
+#         y1 = min(y0 + chunk_size[1], shape[1])
+#         x1 = min(x0 + chunk_size[2], shape[2])
+#
+#         dataset = client.get_dataset(objs[i])
+#         logging.error(f"write dataset: {dataset}")
+#
+#         vol[z0:z1, y0:y1, x0:x1] = dataset[: z1 - z0, : y1 - y0, : x1 - x0]
+#
+#     name = publish("chunk_seed_write", vol, persist=True)
+#     # dask.compute(vol)
+#     return name
+#
 
 
 def groupby_chunk_seed(shape, points, values, chunk_size, dtype):
@@ -640,10 +688,8 @@ def groupby_chunk_seed(shape, points, values, chunk_size, dtype):
     dataframe = dataframe.groupby(["chunk_z", "chunk_y", "chunk_x"]).apply(
         _chunk_seed_groupby, meta={"obj": object}, chunk_size=chunk_size, dtype=dtype
     )
-    # gross hack to allow delayed(dask.array) to function like dask.array
-    result = _chunk_seed_write(shape, chunk_size, dataframe, dtype)
-    result = da.from_delayed(result, shape=shape, dtype=dtype).rechunk(chunk_size)
-    result = da.map_blocks(lambda x: x.compute(), result, dtype=dtype)
+    name = _chunk_seed_write(shape, chunk_size, dataframe, dtype)
+    result = normalize_dataset(name, shape, dtype, chunk_size)
 
     return result
 
@@ -662,7 +708,7 @@ def groupby_chunk_seed(shape, points, values, chunk_size, dtype):
 #     vol = vol.reshape(shape).rechunk(chunk_size)#, limit="128MiB")
 #
 #     return vol
-#
+
 # def naive_chunk_seed(shape, points, values, chunk_size, dtype):
 #     shape, points = dask.compute(shape, points)
 #     z, y, x = [points[:, i].tolist() for i in range(3)]

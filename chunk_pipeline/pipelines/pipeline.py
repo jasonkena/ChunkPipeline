@@ -9,7 +9,8 @@ import numpy as np
 import dask
 import dask.array as da
 from dask_jobqueue import SLURMCluster
-from dask.distributed import Client, LocalCluster, as_completed
+from dask.distributed import Client, LocalCluster, wait
+from distributed.diagnostics.plugin import WorkerPlugin
 from dask.graph_manipulation import bind
 
 import chunk_pipeline.tasks.chunk as chunk
@@ -48,6 +49,11 @@ def iterdict(cfg, base_cfg=None):
             iterdict(value, base_cfg)
         elif isinstance(value, str):
             cfg[key] = value.replace("{TASK}", base_cfg["TASK"])
+
+
+class ResolveWorker(WorkerPlugin):
+    def setup(self, worker):
+        self.worker = worker
 
 
 class Pipeline(ABC):
@@ -213,22 +219,27 @@ class Pipeline(ABC):
 
     def debug_compute(self, *args, **kwargs):
 
-        # futures = self.client.compute(args, **kwargs)
-        # results = []
-        # for future in as_completed(futures):
-        #     if future.status == "error":
-        #         logging.error(repr(future.exception()))
-        #         # logging.error("Error raised, dropping into pdb")
-        #         # pdb.runcall(self.client.recreate_error_locally, future)
-        #         # raise future.exception()
-        #     else:
-        #         results.append(future.result())
-        # if len(results) != len(args):
-        #     breakpoint()
-        return dask.compute(*args)
+        futures = self.client.compute(args, **kwargs)
+        results = []
+        wait(futures)
+        for future in futures:
+            if future.status == "error":
+                logging.error(repr(future.exception()))
+                logging.error("Error raised, dropping into pdb")
+                pdb.runcall(self.client.recreate_error_locally, future)
+                raise future.exception()
+            else:
+                results.append(future.result())
+        if len(results) != len(args):
+            breakpoint()
+        return results
+        # return dask.compute(*args)
 
     # @parallelize
     def compute(self, task_uids=None):
+        for dataset in self.client.list_datasets():
+            self.client.unpublish_dataset(dataset)
+
         # if task_uids is None, compute all tasks
         if task_uids is None:
             task_uids = list(self.tasks.keys())
@@ -349,7 +360,10 @@ class Pipeline(ABC):
 
         for i in range(len(paths)):
             dtype = set(dtypes[i].flatten().tolist())
-            assert len(dtype) == 1
+            try:
+                assert len(dtype) == 1
+            except:
+                __import__("pdb").set_trace()
             dtypes[i] = dtype.pop()
 
         stored = []
