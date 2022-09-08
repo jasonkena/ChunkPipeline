@@ -1,10 +1,13 @@
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
 import unittest
 import numpy as np
 import cc3d
-import os
 import torch
 import torch.nn.functional as F
-from utils import pad_vol
+from chunk_pipeline.utils import pad_vol
 import math
 from multiprocessing.pool import ThreadPool
 
@@ -15,18 +18,18 @@ import dask
 import dask.array as da
 from dask.diagnostics import ProgressBar
 
-import chunk
-import sphere
-import inference
+import chunk_pipeline.tasks.chunk as chunk
+import chunk_pipeline.tasks.sphere as sphere
+# import chunk_pipeline.tasks.inference as inference
+# import chunk_pipeline.tasks.evaluation as evaluation
 
 from stardist.data import test_image_nuclei_3d
 from scipy.ndimage import rotate
 from stardist.matching import matching as stardist_matching
-import evaluation
 
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client
-from settings import *
+# from settings import *
 
 
 def generate_simplex_noise(shape, feature_scale):
@@ -246,6 +249,7 @@ class ChunkTest(unittest.TestCase):
         dim = 100
         num_points = 100
         chunk_size = (9, 8, 7)
+        dtype = float
 
         points = np.unique(np.random.randint(0, dim, (num_points, 3)), axis=0)
         num_points = points.shape[0]
@@ -254,8 +258,8 @@ class ChunkTest(unittest.TestCase):
         gt = np.zeros((dim, dim, dim))
         gt[points[:, 0], points[:, 1], points[:, 2]] = pred
 
-        seeded = inference.chunk_seed(
-            [dim, dim, dim], points, pred, chunk_size
+        seeded = chunk.chunk_seed(
+            [dim, dim, dim], points, pred, chunk_size, dtype
         ).compute()
 
         self.assertTrue(np.array_equal(gt, seeded))
@@ -280,21 +284,21 @@ class ChunkTest(unittest.TestCase):
 
         self.assertTrue(np.array_equal(gt.numpy(), downsampled))
 
-    def test_evaluation(self):
-        chunk_size = (9, 8, 7)
-
-        _, y_true = test_image_nuclei_3d(return_mask=True)
-        y_pred = rotate(y_true, 2, order=0, reshape=False)
-
-        gt_metrics = stardist_matching(y_true, y_pred)
-        temp = evaluation.get_scores(
-            da.from_array(y_true, chunks=chunk_size),
-            da.from_array(y_pred, chunks=chunk_size),
-        )
-        pred_metrics = evaluation.matching(*temp).compute()
-
-        self.assertTrue(gt_metrics, pred_metrics)
-
+    # def test_evaluation(self):
+    #     chunk_size = (9, 8, 7)
+    #
+    #     _, y_true = test_image_nuclei_3d(return_mask=True)
+    #     y_pred = rotate(y_true, 2, order=0, reshape=False)
+    #
+    #     gt_metrics = stardist_matching(y_true, y_pred)
+    #     temp = evaluation.get_scores(
+    #         da.from_array(y_true, chunks=chunk_size),
+    #         da.from_array(y_pred, chunks=chunk_size),
+    #     )
+    #     pred_metrics = evaluation.matching(*temp).compute()
+    #
+    #     self.assertTrue(gt_metrics, pred_metrics)
+    #
     def test_chunk_unique(self):
         # test both argwhere_seg and simple_chunk's bbox
         shape = (100, 100, 100)

@@ -694,20 +694,56 @@ def groupby_chunk_seed(shape, points, values, chunk_size, dtype):
     return result
 
 
-# def chunk_seed(shape, points, values, chunk_size, dtype):
-#     # does not work well, since flattening ruins chunking
-#     if np.isnan(points.shape).any():
-#         points.compute_chunk_sizes()
-#     if np.isnan(values.shape).any():
-#         values.compute_chunk_sizes()
-#     vol = da.zeros(math.prod(shape), dtype=dtype)
-#
-#     # https://github.com/dask/dask/pull/3407
-#     idx = points[:, 0] * (shape[1] * shape[2]) + points[:, 1] * shape[2] + points[:, 2]
-#     vol[(idx,)] = values
-#     vol = vol.reshape(shape).rechunk(chunk_size)#, limit="128MiB")
-#
-#     return vol
+def chunk_seed(shape, points, values, chunk_size, dtype):
+    # does not work well, since flattening ruins chunking
+    if np.isnan(points.shape).any():
+        points.compute_chunk_sizes()
+    if np.isnan(values.shape).any():
+        values.compute_chunk_sizes()
+
+    # round shape to nearest multiple of chunk_size
+    round_shape = [
+        math.ceil(shape[i] / chunk_size[i]) * chunk_size[i] for i in range(3)
+    ]
+
+    # total number of chunks
+    tz, ty, tx = [round_shape[i] // chunk_size[i] for i in range(3)]
+    # chunk_idx
+    nz, ny, nx = [points[:, i] // chunk_size[i] for i in range(3)]
+    # remainder
+    z, y, x = [points[:, i] % chunk_size[i] for i in range(3)]
+    cz, cy, cx = [chunk_size[i] for i in range(3)]
+
+    # index as sum of starting chunk index and remainder
+    idx = (nz * ty * tx + ny * tx + nx) * (cz * cy * cx) + (z * cy * cx) + (y * cx) + x
+
+    # NOTE: use this to seed pre-existing volume
+    # def _chunk_reshape(vol, shape):
+    #     return [vol.reshape(shape)]
+
+    # vol = da.zeros(round_shape, chunks=chunk_size, dtype=dtype)
+    # # [tz, ty, tz] -> [1]
+    # flattened = chunk(_chunk_reshape, [vol], output_dataset_dtypes=[object]).reshape(-1)
+    # flattened = da.map_blocks(lambda x: x, flattened, chunks=(cz*cy*cx,), dtype=dtype)
+
+    flattened = da.zeros(
+        tz * ty * tx * cz * cy * cx, chunks=(cz * cy * cx,), dtype=dtype
+    )
+    # https://github.com/dask/dask/pull/3407
+    flattened[(idx,)] = values
+    print(flattened)
+    flattened = flattened.reshape([tz, ty, tx, cz, cy, cx])
+    print(flattened)
+
+    # [tz, cz, ty, cy, tx, cx]
+    flattened = flattened.transpose([0, 3, 1, 4, 2, 5])
+
+    vol = flattened.reshape([tz * cz, ty * cy, tx * cx])
+    vol = vol[: shape[0], : shape[1], : shape[2]]  # undo padding
+
+    print(vol)
+    return vol
+
 
 # def naive_chunk_seed(shape, points, values, chunk_size, dtype):
 #     shape, points = dask.compute(shape, points)
