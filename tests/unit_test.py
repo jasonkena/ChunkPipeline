@@ -1,5 +1,6 @@
 import os
 import sys
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 import unittest
@@ -20,6 +21,7 @@ from dask.diagnostics import ProgressBar
 
 import chunk_pipeline.tasks.chunk as chunk
 import chunk_pipeline.tasks.sphere as sphere
+
 # import chunk_pipeline.tasks.inference as inference
 # import chunk_pipeline.tasks.evaluation as evaluation
 
@@ -29,6 +31,7 @@ from stardist.matching import matching as stardist_matching
 
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client
+
 # from settings import *
 
 

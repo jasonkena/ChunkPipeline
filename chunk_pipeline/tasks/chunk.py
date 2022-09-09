@@ -731,14 +731,23 @@ def chunk_seed(shape, points, values, chunk_size, dtype):
     )
     # https://github.com/dask/dask/pull/3407
     flattened[(idx,)] = values
-    print(flattened)
-    flattened = flattened.reshape([tz, ty, tx, cz, cy, cx])
-    print(flattened)
+    vol = (
+        chunk(
+            lambda x: [x.reshape(chunk_size)],
+            [flattened],
+            output_dataset_dtypes=[object],
+        )
+        .reshape(tz, ty, tx)
+        .rechunk(1, 1, 1)
+    )
+    vol = da.map_blocks(
+        lambda x: x.item(),
+        vol,
+        chunks=chunk_size,
+        dtype=dtype,
+        name="chunk_seed_unflatten",
+    )
 
-    # [tz, cz, ty, cy, tx, cx]
-    flattened = flattened.transpose([0, 3, 1, 4, 2, 5])
-
-    vol = flattened.reshape([tz * cz, ty * cy, tx * cx])
     vol = vol[: shape[0], : shape[1], : shape[2]]  # undo padding
 
     print(vol)
