@@ -27,52 +27,23 @@ def _chunk_zyx_idx(vol, uint_dtype, block_info):
 
 
 def chunk_zyx_idx(shape, row, chunk_size, uint_dtype):
+    # NOTE: verify that row fits in uint_dtype
+    # prevent casting to int
+    row = row.astype(uint_dtype)
     temp = da.zeros(
         shape, chunks=chunk_size, dtype=bool
     )  # used only to compute block_info
     z, y, x = chunk.chunk(
         _chunk_zyx_idx,
         [temp],
-        output_dataset_dtypes=[int, int, int],
+        output_dataset_dtypes=[uint_dtype, uint_dtype, uint_dtype],
         uint_dtype=uint_dtype,
     )
     return z + row[1], y + row[3], x + row[5]
 
 
 def chunk_idx(mask, array):
-    # basically does array[mask]
-    assert mask.chunks == array.chunks
-    results = (
-        chunk.chunk(
-            lambda mask, array: [array[mask]],
-            [mask, array],
-            output_dataset_dtypes=[object],
-            name="chunk_mask_idx",
-        )
-        .reshape(-1)
-        .to_delayed()
-    )
-    results = [
-        da.from_delayed(x[0], shape=(np.nan,), dtype=array.dtype) for x in results
-    ]
-    results = da.concatenate(results, axis=0)
-    return results
-
-
-# def chunk_idx(shape, row):
-#     # returns [z, y, x, 3]
-#     n = len(shape)
-#     idx = []
-#     for i in range(n):
-#         temp = [1] * (n + 1)
-#         temp[i] = shape[i]
-#         idx.append(da.arange(shape[i]).reshape(temp))
-#     idx = [da.broadcast_to(x, list(shape) + [1]) for x in idx]
-#     idx = da.concatenate(idx, axis=-1)
-#     idx = idx + np.array([row[1], row[3], row[5]]).reshape(1, 1, 1, -1)
-#
-#     return idx
-#
+    return array[mask]
 
 
 def chunk_mask(mask, arrays, row, chunk_size, uint_dtype):
@@ -145,9 +116,7 @@ def task_generate_point_cloud(cfg, extracted, skel):
         da.from_delayed(radius, shape=(np.nan,), dtype=float) + pc["TRUNK_RADIUS_DELTA"]
     )
 
-    seeded = chunk.groupby_chunk_seed(
-        raw.shape, seed, radius, general["CHUNK_SIZE"], float
-    )
+    seeded = chunk.chunk_seed(raw.shape, seed, radius, general["CHUNK_SIZE"], float)
     expanded = sphere.get_expand_edt(seeded, general["ANISOTROPY"], da.max(radius))
 
     idx, arrays = chunk_mask(

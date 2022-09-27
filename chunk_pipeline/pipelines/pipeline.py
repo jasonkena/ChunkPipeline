@@ -21,6 +21,7 @@ import zarr
 import numcodecs
 
 import logging
+from dask_memusage import install
 
 # https://stackoverflow.com/questions/952914/how-do-i-make-a-flat-list-out-of-a-list-of-lists
 def flatten(l):
@@ -81,15 +82,6 @@ class Pipeline(ABC):
         slurm = self.cfg["SLURM"]
         misc = self.cfg["MISC"]
 
-        # # dask.config.set(scheduler='single-threaded')
-        # from dask_memusage import install
-        # cluster = LocalCluster(n_workers=10, threads_per_worker=1,
-        #                memory_limit=None)
-        # install(cluster.scheduler, misc["MEMUSAGE_PATH"])  # <-- INSTALL
-        # client = Client(cluster)
-        # print(cluster.dashboard_link)
-        # return func(self, *args, **kwargs)
-        #
         if (slurm_exists := shutil.which("sbatch")) is None:
             logging.info("SLURM not available, falling back to LocalCluster")
 
@@ -134,9 +126,18 @@ class Pipeline(ABC):
                 # allocate all CPUs and run only one job per node
                 job_extra_directives=["--exclusive"],
             )
-            if slurm_exists
-            else LocalCluster()
+            if slurm_exists and not misc["ENABLE_MEMUSAGE"]
+            else LocalCluster(
+                **(
+                    {"threads_per_worker": 1, "n_workers": 5, "memory_limit": "12GiB"}
+                    if misc["ENABLE_MEMUSAGE"]
+                    else {}
+                )
+            )
         )
+        if misc["ENABLE_MEMUSAGE"]:
+            install(self.cluster.scheduler, misc["MEMUSAGE_PATH"])
+
         self.client = Client(self.cluster)
 
         logging.info(self.cluster.dashboard_link)
@@ -218,7 +219,6 @@ class Pipeline(ABC):
             return task["checkpoint"], result
 
     def debug_compute(self, *args, **kwargs):
-
         futures = self.client.compute(args, **kwargs)
         results = []
         wait(futures)

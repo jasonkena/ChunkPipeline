@@ -21,4 +21,4 @@ hostname
 
 
 cd /mmfs1/data/adhinart/dendrite
-/data/adhinart/.conda/envs/clean_dendrite/bin/python -m chunk_pipeline.main --pipeline DendritePipeline --config human.py
+/data/adhinart/.conda/envs/clean_dendrite/bin/python -m chunk_pipeline.main --pipeline DendritePipeline --config seg_den.py

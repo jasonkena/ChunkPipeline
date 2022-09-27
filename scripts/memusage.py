@@ -1,6 +1,8 @@
 import pandas as pd
 
-path = "../data/seg_den/memusage.csv"
+# get sysargs
+import sys
+path = f"../data/{sys.argv[1]}/memusage.csv"
 
 file = pd.read_csv(path)
 file = file.sort_values(by=["max_memory_mb"], ascending=False)

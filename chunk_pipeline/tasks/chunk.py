@@ -694,12 +694,29 @@ def groupby_chunk_seed(shape, points, values, chunk_size, dtype):
     return result
 
 
-def chunk_seed(shape, points, values, chunk_size, dtype):
-    # does not work well, since flattening ruins chunking
-    if np.isnan(points.shape).any():
-        points.compute_chunk_sizes()
-    if np.isnan(values.shape).any():
-        values.compute_chunk_sizes()
+def fix_points_values(points, values, chunk_size):
+    # rechunk points and values so that each point/value chunk only refers to a single output chunk, preventing memory issues
+    points, values = dask.compute(points, values)
+
+    # chunk_idx
+    # [3, npoints]
+    chunk_idx = np.stack([points[:, i] // chunk_size[i] for i in range(3)], axis=0)
+    _, inverse, counts = np.unique(
+        chunk_idx, axis=-1, return_inverse=True, return_counts=True
+    )
+    argsort = np.argsort(inverse)
+    points, values = points[argsort], values[argsort]
+    chunks = tuple(counts.tolist())
+
+    points = da.from_array(points, chunks=(chunks, (3,)))
+    values = da.from_array(values, chunks=(chunks,))
+
+    return points, values
+
+
+def flatten_chunk_seed(shape, points, values, chunk_size, dtype, fix=True):
+    if fix:
+        points, values = fix_points_values(points, values, chunk_size)
 
     # round shape to nearest multiple of chunk_size
     round_shape = [
@@ -750,7 +767,6 @@ def chunk_seed(shape, points, values, chunk_size, dtype):
 
     vol = vol[: shape[0], : shape[1], : shape[2]]  # undo padding
 
-    print(vol)
     return vol
 
 

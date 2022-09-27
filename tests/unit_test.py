@@ -261,6 +261,8 @@ class ChunkTest(unittest.TestCase):
         gt = np.zeros((dim, dim, dim))
         gt[points[:, 0], points[:, 1], points[:, 2]] = pred
 
+        points = da.from_delayed(dask.delayed(points), shape=(np.nan, 3), dtype=int)
+        pred = da.from_delayed(dask.delayed(pred), shape=(np.nan,), dtype=bool)
         seeded = chunk.chunk_seed(
             [dim, dim, dim], points, pred, chunk_size, dtype
         ).compute()

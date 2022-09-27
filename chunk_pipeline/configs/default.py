@@ -18,6 +18,7 @@ TASK = None  # den_seg/mouse/human/etc. this als
 
 # {TASK} will be filled in at runtime
 _base_path = "/mmfs1/data/adhinart/dendrite/data"
+MISC__ENABLE_MEMUSAGE = False
 MISC__MEMUSAGE_PATH = _base_path + "/{TASK}/memusage.csv"
 MISC__ZARR_PATH = _base_path + "/{TASK}/"
 
@@ -105,13 +106,13 @@ SLURM__NUM_PROCESSES_PER_JOB = 3
 # in GiB
 SLURM__MEMORY_PER_JOB = 170  # used only to compute number of threads
 # get this by running fil-profile run debug.py (max memory used by a task)
-SLURM__MEMORY_PER_TASK = 4  # to calculate number of threads per job
+SLURM__MEMORY_PER_TASK = 10  # to calculate number of threads per job
 
 # in hours
 SLURM__WALLTIME = 2
 SLURM__MIN_JOBS = 1
 SLURM__MAX_JOBS = 20
-SLURM__ADAPT_INTERVAL = "10s"  # wait 10 seconds before scaling
+SLURM__ADAPT_INTERVAL = "60s"  # wait 10 seconds before scaling
 # Local directory has to be unique for each job
 # random hex is to guarantee unique directory name
 # SLURM__LOCAL_DIRECTORY = "/tmp/chunk_pipeline/$(openssl rand -hex 5)" # tmp supposedly gets cleared

@@ -11,43 +11,17 @@ import expand_parabola
 
 import dask.array as da
 import dask
+from dask_image.ndmorph import binary_dilation
 
 # NOTE: here naive separation between segments is used: each segment id is processed separately
 # can potentially come up with a way to do it in a chunk-based manner instead of by segments
 # will need to deal with chunk boundaries then
 
 
-def _chunk_get_boundary(vol):
-    return [
-        ndimage.morphology.binary_dilation(
-            ~np.pad(vol, ((1, 1), (1, 1), (1, 1))), structure=np.ones((3, 3, 3))
-        )[1:-1, 1:-1, 1:-1]
-    ]
-
-
-# def _chunk_get_boundary(vol):
-#     vol = torch.from_numpy(vol > 0)
-#     # pad to guarantee that boundary inputs are also padded
-#     padded_vol = F.pad(vol, (1, 1, 1, 1, 1, 1))
-#     boundary = (
-#         F.max_pool3d(
-#             (~padded_vol.unsqueeze(0)).float(), kernel_size=3, stride=1
-#         ).squeeze(0)
-#         > 0
-#     )
-#     return [boundary.numpy()]
-#
-
-
 def get_boundary(vol):
-    # gets foreground voxels which "touch" background pixels, as defined by a 3x3x3 kernel
-    # vol: 3d volume (with 0 indicating background)
-    # NOTE: this function intentionally ignores anisotropy
-    # TODO: can prevent double input chunks to full chunk_size; no way to elegantly implement it
-
-    boundary = chunk.chunk(_chunk_get_boundary, [vol], [bool], pad="extend")
+    boundary = ~da.pad(vol, ((1, 1), (1, 1), (1, 1)))
+    boundary = binary_dilation(boundary, structure=np.ones((3, 3, 3)))[1:-1, 1:-1, 1:-1]
     boundary = da.logical_and(boundary, vol)
-
     return boundary
 
 

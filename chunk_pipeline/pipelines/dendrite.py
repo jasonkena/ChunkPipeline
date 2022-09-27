@@ -51,10 +51,6 @@ class DendritePipeline(Pipeline):
         self.compute()
 
         point_clouds = []
-        # for i in [0]:
-        # for i in [34]:
-        # for i in [13]:
-        # for i in [22]:
         for i in range(n):
             point_clouds.append(
                 self.add(
