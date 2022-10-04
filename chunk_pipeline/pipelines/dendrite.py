@@ -60,18 +60,32 @@ class DendritePipeline(Pipeline):
                     depends_on=[extracted[i], skeletons[i]],
                 )
             )
+            if i % 10 == 0:
+                print("Computing point cloud", i)
+                # this already uses ~ 500 GB of RAM
+                self.compute()
 
         self.compute()
 
         # export skeletons
         skels = []
         longest_paths = []
+
+        # export point clouds
+        idxs = []
+        spines = []
+        expanded = []
+
         for i in range(n):
             skels.append(self.load(f"skeleton_{i}/skeleton"))
             longest_paths.append(self.load(f"skeleton_{i}/longest_path"))
+            idxs.append(f"point_cloud_{i}/idx")
+            spines.append(f"point_cloud_{i}/spine")
+            expanded.append(f"point_cloud_{i}/expanded")
         from chunk_pipeline.utils import object_array
 
         skels = object_array(skels)
         longest_paths = object_array(longest_paths)
 
         self.export("skel.zip", [skels, longest_paths], ["skel", "longest_path"])
+        self.export("pc.zip", idxs + spines + expanded, idxs + spines + expanded)

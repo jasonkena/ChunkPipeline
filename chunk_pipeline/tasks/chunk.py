@@ -770,10 +770,36 @@ def flatten_chunk_seed(shape, points, values, chunk_size, dtype, fix=True):
     return vol
 
 
-# def naive_chunk_seed(shape, points, values, chunk_size, dtype):
-#     shape, points = dask.compute(shape, points)
-#     z, y, x = [points[:, i].tolist() for i in range(3)]
-#     vol = da.zeros(shape, dtype=dtype, chunks=chunk_size)
-#     vol.vindex[z, y, x] = values
-#
-#     return vol
+def _naive_chunk_seed(vol, points, values, block_info):
+    vol = vol.copy()
+    zmin, zmax = block_info[0]["array-location"][0]
+    ymin, ymax = block_info[0]["array-location"][1]
+    xmin, xmax = block_info[0]["array-location"][2]
+
+    is_valid = (
+        (zmin <= points[:, 0])
+        & (points[:, 0] < zmax)
+        & (ymin <= points[:, 1])
+        & (points[:, 1] < ymax)
+        & (xmin <= points[:, 2])
+        & (points[:, 2] < xmax)
+    )
+
+    points = points[is_valid]
+    values = values[is_valid]
+
+    vol[points[:, 0] - zmin, points[:, 1] - ymin, points[:, 2] - xmin] = values
+
+    return [vol]
+
+
+def naive_chunk_seed(shape, points, values, chunk_size, dtype):
+    # computes points and values
+    result = chunk(
+        _naive_chunk_seed,
+        [da.zeros(shape, chunks=chunk_size, dtype=dtype)],
+        output_dataset_dtypes=[dtype],
+        points=points,
+        values=values,
+    )
+    return result

@@ -112,7 +112,7 @@ SLURM__MEMORY_PER_TASK = 10  # to calculate number of threads per job
 SLURM__WALLTIME = 2
 SLURM__MIN_JOBS = 1
 SLURM__MAX_JOBS = 20
-SLURM__ADAPT_INTERVAL = "60s"  # wait 10 seconds before scaling
+SLURM__ADAPT_INTERVAL = "10s"  # wait 10 seconds before scaling
 # Local directory has to be unique for each job
 # random hex is to guarantee unique directory name
 # SLURM__LOCAL_DIRECTORY = "/tmp/chunk_pipeline/$(openssl rand -hex 5)" # tmp supposedly gets cleared

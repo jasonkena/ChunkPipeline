@@ -103,7 +103,7 @@ class Pipeline(ABC):
                     slurm["INTERFACE"],
                     "--nthreads",
                     str(
-                        int(
+                        n_threads := int(
                             slurm["MEMORY_PER_JOB"]
                             / (
                                 slurm["NUM_PROCESSES_PER_JOB"]
@@ -121,6 +121,7 @@ class Pipeline(ABC):
                     f"{slurm['WALLTIME']*60-5}m",
                     "--lifetime-stagger",
                     "4m",
+                    f'--memory-limit=$(echo "$SLURM_MEM_PER_NODE / 1024 / {slurm["NUM_PROCESSES_PER_JOB"]}" | bc)GiB',
                 ],
                 log_directory=slurm["LOG_DIRECTORY"],
                 # allocate all CPUs and run only one job per node
@@ -219,6 +220,11 @@ class Pipeline(ABC):
             return task["checkpoint"], result
 
     def debug_compute(self, *args, **kwargs):
+        # if any(args) or len(kwargs):
+        #     for x in args[0]:
+        #         x.visualize(filename=f"{x.key}.svg")
+        #         print("visualizing")
+        #     __import__('pdb').set_trace()
         futures = self.client.compute(args, **kwargs)
         results = []
         wait(futures)

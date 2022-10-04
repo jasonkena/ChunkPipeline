@@ -116,7 +116,9 @@ def task_generate_point_cloud(cfg, extracted, skel):
         da.from_delayed(radius, shape=(np.nan,), dtype=float) + pc["TRUNK_RADIUS_DELTA"]
     )
 
-    seeded = chunk.chunk_seed(raw.shape, seed, radius, general["CHUNK_SIZE"], float)
+    seeded = chunk.naive_chunk_seed(
+        raw.shape, seed, radius, general["CHUNK_SIZE"], float
+    )
     expanded = sphere.get_expand_edt(seeded, general["ANISOTROPY"], da.max(radius))
 
     idx, arrays = chunk_mask(
@@ -130,7 +132,7 @@ def task_generate_point_cloud(cfg, extracted, skel):
     result = {}
     result["idx"] = idx
     result["spine"] = arrays[0]
-    result["boundary"] = arrays[1]
+    # result["boundary"] = arrays[1]
     result["expanded"] = arrays[2]
 
     return result

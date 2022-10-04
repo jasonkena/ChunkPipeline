@@ -22,8 +22,9 @@ dtype = int
 
 z, y, x = np.meshgrid(
     *[np.arange(location[i], location[i] + shape[i], dtype=dtype) for i in range(3)],
-    indexing="ij", copy=False
+    indexing="ij",
+    copy=False
 )
-z+1
-y+1
-x+1
+z + 1
+y + 1
+x + 1
