@@ -125,3 +125,8 @@ SLURM__LOCAL_DIRECTORY = (
 SLURM__DASHBOARD_PORT = 8989
 SLURM__LOG_DIRECTORY = "/mmfs1/data/adhinart/dendrite/logs"  # assuming only a single job is placed on each node
 SLURM__INTERFACE = "ib0"
+
+# low res foundation datasets
+FOUNDATION__CHUNK_SIZE = (1, -1, -1)  # z-slice chunking
+FOUNDATION__GAUSSIAN_SIGMA = 3.0
+FOUNDATION__CONNECTIVITY = BASELINE__CONNECTIVITY

@@ -5,7 +5,7 @@ import dask
 import dask.array as da
 
 
-def task_load_h5(cfg):
+def task_load_h5(cfg, chunk_size=None):
     # will read raw , spine, and seg datasets
     general = cfg["GENERAL"]
     h5 = cfg["H5"]  # of form {"raw": (file, dataset)}
