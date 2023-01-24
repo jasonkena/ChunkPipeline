@@ -121,7 +121,7 @@ class Pipeline(ABC):
                     f"{slurm['WALLTIME']*60-5}m",
                     "--lifetime-stagger",
                     "4m",
-                    f'--memory-limit=$(echo "$SLURM_MEM_PER_NODE / 1024 / {slurm["NUM_PROCESSES_PER_JOB"]}" | bc)GiB',
+                    f"""--memory-limit=$(grep MemFree /proc/meminfo | awk '{{print $2, "/ 1000000 / {slurm["NUM_PROCESSES_PER_JOB"]} "}}' | bc)GiB""",
                 ],
                 log_directory=slurm["LOG_DIRECTORY"],
                 # allocate all CPUs and run only one job per node
