@@ -13,7 +13,8 @@ viewer = neuroglancer.Viewer()
 
 # SNEMI (# 3d vol dim: z,y,x)
 res = neuroglancer.CoordinateSpace(
-    names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 6, 6]
+    names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[80, 88, 88]
+    # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 6, 6]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 64, 64]
 )
 
@@ -29,10 +30,13 @@ def ngLayer(data, res, oo=[0, 0, 0], tt="segmentation"):
 # seg = h5py.File("r0.h5").get("seg")[:]
 # seg = h5py.File("/home/jason/Downloads/snemisubmissions/human/test-input.h5").get("main")[:]
 # im = h5py.File("/mmfs1/data/adhinart/foundation/zebrafinch_im_80nm.h5").get("main")[:]
-im = h5py.File("/mmfs1/data/adhinart/foundation/mouse_microns-phase1_64nm.h5").get("main")[:]
+# im = h5py.File("/mmfs1/data/adhinart/foundation/mouse_microns-phase1_64nm.h5").get("main")[:]
 # im = h5py.File("/mmfs1/data/adhinart/foundation/mouse_moritz2019_88nm.h5").get("main")[:]
-seg = zarr.open_group("/mmfs1/data/adhinart/dendrite/data/foundation_mouse_microns")["seg"]["seg"][:]
+# seg = zarr.open_group("/mmfs1/data/adhinart/dendrite/data/foundation_mouse_microns")["seg"]["seg"][:]
 # seg = zarr.open_group("/mmfs1/data/adhinart/dendrite/data/foundation_mouse_moritz")["seg"]["seg"][:]
+
+im = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("im")[:]
+seg = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("seg")[:]
 
 # im = h5py.File("r0.h5").get("original")[:]
 # seg = h5py.File("inferred_1.h5").get("main")[:].astype(np.uint8)

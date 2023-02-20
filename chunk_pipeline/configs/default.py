@@ -130,3 +130,17 @@ SLURM__INTERFACE = "ib0"
 FOUNDATION__CHUNK_SIZE = (1, -1, -1)  # z-slice chunking
 FOUNDATION__GAUSSIAN_SIGMA = 3.0
 FOUNDATION__CONNECTIVITY = BASELINE__CONNECTIVITY
+
+NIB = None  # form {"name": filename}
+l1_path = "/data/adhinart/L1-Skeleton"
+L1__IDS = list(range(1, 25))
+L1__BIN_PATH = f"junest {l1_path}/PointCloud/PointCloudL1"
+L1__JSON_PATH = f"{l1_path}/default_skeleton_config.json"
+# junest can't read /scratch
+L1__TMP_DIR = f"{l1_path}/tmp"
+L1__STORE_TMP = False
+# noise pre downscaling
+L1__NOISE_STD = 5.0
+L1__DOWNSCALE_FACTOR = 0.01
+# set to 0 to use all points
+L1__NUM_SAMPLE = 0
