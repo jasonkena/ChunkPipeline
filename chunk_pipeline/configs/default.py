@@ -102,7 +102,8 @@ SLURM__CORES_PER_JOB = 48
 
 # https://github.com/dask/dask-jobqueue/issues/181#issue-372752428
 # multiprocess to release GIL
-SLURM__NUM_PROCESSES_PER_JOB = 3
+SLURM__NUM_PROCESSES_PER_JOB = 1
+# SLURM__NUM_PROCESSES_PER_JOB = 3
 # in GiB
 SLURM__MEMORY_PER_JOB = 170  # used only to compute number of threads
 # get this by running fil-profile run debug.py (max memory used by a task)
@@ -144,3 +145,12 @@ L1__NOISE_STD = 5.0
 L1__DOWNSCALE_FACTOR = 0.01
 # set to 0 to use all points
 L1__NUM_SAMPLE = 0
+
+VESICLE__GLOB = ["/mmfs1/data/adhinart/vesicle/new_xiaomeng/*/*.tif"]  # ["*/*"]
+# VESICLE__GLOB = ["/mmfs1/data/adhinart/vesicle/new_im_vesicle/*.tif"]
+VESICLE__BIN_PATH = "/mmfs1/data/adhinart/vesicle/run.sh"
+# randomly wait X seconds before starting jobs
+VESICLE__STAGGER = 10
+
+FRENET__PATH_LENGTH = 300
+FRENET__SEGMENT_PER = 50

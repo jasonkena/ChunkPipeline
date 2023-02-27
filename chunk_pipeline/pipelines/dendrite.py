@@ -7,6 +7,7 @@ from chunk_pipeline.tasks import (
     task_extract_seg,
     task_skeletonize,
     task_generate_point_cloud,
+    task_generate_point_cloud_segments,
 )
 
 
@@ -60,11 +61,26 @@ class DendritePipeline(Pipeline):
                     depends_on=[extracted[i], skeletons[i]],
                 )
             )
-            if i % 10 == 0:
+            if i % 5 == 0:
                 print("Computing point cloud", i)
-                # this already uses ~ 500 GB of RAM
                 self.compute()
 
+        self.compute()
+
+        point_cloud_segments = []
+        for i in range(n):
+            point_cloud_segments.append(
+                self.add(
+                    task_generate_point_cloud_segments,
+                    f"point_cloud_segments_{i}",
+                    cfg_groups=["GENERAL", "FRENET"],
+                    depends_on=[point_clouds[i], skeletons[i]],
+                )
+            )
+            if i % 5 == 0:
+                print("Computing point cloud segments", i)
+                # this already uses ~ 500 GB of RAM
+                self.compute()
         self.compute()
 
         # export skeletons
@@ -75,6 +91,24 @@ class DendritePipeline(Pipeline):
         idxs = []
         spines = []
         expanded = []
+        segments = []
+
+        import numpy as np
+        import os
+
+        # task_name = "seg_den"
+        # base_path = f"/mmfs1/data/adhinart/dendrite/data/{task_name}/pc_export"
+        # if not os.path.exists(base_path):
+        #     os.makedirs(base_path)
+        # for i in range(n):
+        #     group = zarr.open_group(f"/mmfs1/data/adhinart/dendrite/data/{task_name}/point_cloud_segments_{i}")
+        #     centerline = self.load(f"point_cloud_segments_{i}/centerline")
+        #     np.savez(os.path.join(base_path,f"{task_name}_{i}_centerline.npz"), centerline)
+        #     for j in range(6):
+        #         pc = group[str(j)][:]
+        #         np.savez(os.path.join(base_path,f"{task_name}_{i}_{j}.npz"), pc)
+        # print("saving done")
+        #
 
         for i in range(n):
             skels.append(self.load(f"skeleton_{i}/skeleton"))
@@ -82,10 +116,18 @@ class DendritePipeline(Pipeline):
             idxs.append(f"point_cloud_{i}/idx")
             spines.append(f"point_cloud_{i}/spine")
             expanded.append(f"point_cloud_{i}/expanded")
+            segments.append(f"point_cloud_segments_{i}/skel")
+            segments.append(f"point_cloud_segments_{i}/skel_gnb")
+            for j in range(6):
+                segments.append(f"point_cloud_segments_{i}/pc_{j}")
+                segments.append(f"point_cloud_segments_{i}/pc_gnb_{j}")
+
         from chunk_pipeline.utils import object_array
 
         skels = object_array(skels)
         longest_paths = object_array(longest_paths)
 
+        self.export("pc_segments.zip", segments, segments)
         self.export("skel.zip", [skels, longest_paths], ["skel", "longest_path"])
         self.export("pc.zip", idxs + spines + expanded, idxs + spines + expanded)
+        # self.export("pc_segments.zip", segments, segments)

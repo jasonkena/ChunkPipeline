@@ -2,6 +2,8 @@ import os
 import shutil
 from abc import ABC, abstractmethod
 import itertools
+import numcodecs
+
 import pdb
 
 import numpy as np
@@ -72,11 +74,12 @@ class Pipeline(ABC):
             if cfg != base_group["_config"][0]:
                 logging.info("Config has changed, overwriting old config")
 
+        self.zarr_kwargs = {
+            "compressor": numcodecs.Zstd(),  # use zstd as it has no block size limit
+            "object_codec": numcodecs.Pickle(),
+        }
         base_group.create_dataset(
-            "_config",
-            data=object_array([self.cfg]),
-            object_codec=numcodecs.Pickle(),
-            overwrite=True,
+            "_config", data=object_array([self.cfg]), overwrite=True, **self.zarr_kwargs
         )
 
         slurm = self.cfg["SLURM"]
@@ -315,7 +318,7 @@ class Pipeline(ABC):
                             component=path,
                             compute=False,
                             # overwrite=True,
-                            object_codec=numcodecs.Pickle(),
+                            **self.zarr_kwargs,
                         )
                     )
                     if is_object:
@@ -328,17 +331,13 @@ class Pipeline(ABC):
 
         for i in idx:
             groups[i].create_dataset(
-                "_attrs",
-                data=object_array([attrs[i]]),
-                object_codec=numcodecs.Pickle(),
+                "_attrs", data=object_array([attrs[i]]), **self.zarr_kwargs
             )
             implicit_cfg = {
                 group: self.cfg[group] for group in self.tasks[i]["implicit_cfg_groups"]
             }
             groups[i].create_dataset(
-                "_implicit_cfg",
-                data=object_array([implicit_cfg]),
-                object_codec=numcodecs.Pickle(),
+                "_implicit_cfg", data=object_array([implicit_cfg]), **self.zarr_kwargs
             )
         return
 
@@ -441,7 +440,7 @@ class Pipeline(ABC):
             if isinstance(sources[i], str):
                 zarr.copy(source, group, name)
             else:
-                group.create_dataset(name, data=source, object_codec=numcodecs.Pickle())
+                group.create_dataset(name, data=source, **self.zarr_kwargs)
         logging.info("Export finished")
 
     @abstractmethod

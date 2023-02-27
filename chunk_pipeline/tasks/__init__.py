@@ -6,3 +6,5 @@ from chunk_pipeline.tasks.generate_skeleton import task_skeletonize
 from chunk_pipeline.tasks.point import task_generate_point_cloud
 from chunk_pipeline.tasks.foundation import task_foundation_seg
 from chunk_pipeline.tasks.generate_l1 import task_generate_l1
+from chunk_pipeline.tasks.vesicle import task_run_vesicle
+from chunk_pipeline.tasks.frenet import task_generate_point_cloud_segments
