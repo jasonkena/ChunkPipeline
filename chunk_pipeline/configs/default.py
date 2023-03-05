@@ -152,5 +152,5 @@ VESICLE__BIN_PATH = "/mmfs1/data/adhinart/vesicle/run.sh"
 # randomly wait X seconds before starting jobs
 VESICLE__STAGGER = 10
 
-FRENET__PATH_LENGTH = 300
-FRENET__SEGMENT_PER = 50
+FRENET__PATH_LENGTH = 3000
+FRENET__SEGMENT_PER = 500

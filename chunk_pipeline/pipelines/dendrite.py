@@ -77,7 +77,7 @@ class DendritePipeline(Pipeline):
                     depends_on=[point_clouds[i], skeletons[i]],
                 )
             )
-            if i % 5 == 0:
+            if i % 10 == 0:
                 print("Computing point cloud segments", i)
                 # this already uses ~ 500 GB of RAM
                 self.compute()
@@ -91,7 +91,10 @@ class DendritePipeline(Pipeline):
         idxs = []
         spines = []
         expanded = []
+
         segments = []
+        segments_skel = []
+        segments_skel_gnb = []
 
         import numpy as np
         import os
@@ -116,17 +119,25 @@ class DendritePipeline(Pipeline):
             idxs.append(f"point_cloud_{i}/idx")
             spines.append(f"point_cloud_{i}/spine")
             expanded.append(f"point_cloud_{i}/expanded")
-            segments.append(f"point_cloud_segments_{i}/skel")
-            segments.append(f"point_cloud_segments_{i}/skel_gnb")
+            segments_skel.append(self.load(f"point_cloud_segments_{i}/skel"))
+            segments_skel_gnb.append(self.load(f"point_cloud_segments_{i}/skel_gnb_0"))
+            # segments_skel_gnb.append(self.load(f"point_cloud_segments_{i}/skel_gnb"))
             for j in range(6):
                 segments.append(f"point_cloud_segments_{i}/pc_{j}")
                 segments.append(f"point_cloud_segments_{i}/pc_gnb_{j}")
+                segments.append(f"point_cloud_segments_{i}/closest_idx_{j}")
+                segments.append(f"point_cloud_segments_{i}/dist_{j}")
 
         from chunk_pipeline.utils import object_array
 
         skels = object_array(skels)
         longest_paths = object_array(longest_paths)
 
+        self.export(
+            "pc_segments_skel.zip",
+            [segments_skel, segments_skel_gnb],
+            ["skel", "skel_gnb"],
+        )
         self.export("pc_segments.zip", segments, segments)
         self.export("skel.zip", [skels, longest_paths], ["skel", "longest_path"])
         self.export("pc.zip", idxs + spines + expanded, idxs + spines + expanded)

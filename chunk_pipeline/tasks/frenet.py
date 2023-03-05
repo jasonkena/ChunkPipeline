@@ -1,4 +1,5 @@
 import numpy as np
+from math import gcd
 from scipy.spatial import KDTree
 from scipy.spatial.distance import cdist
 from scipy.interpolate import UnivariateSpline
@@ -9,7 +10,7 @@ import dask.array as da
 
 @dask.delayed
 def segment_pc(idx, spine, skel, longest_path, path_length, segment_per, anisotropy):
-    dtype = np.float32
+    dtype = np.float64
     anisotropy = np.array(anisotropy).astype(dtype)
     # idx: [n, 3]
     # spine: [n]
@@ -21,40 +22,74 @@ def segment_pc(idx, spine, skel, longest_path, path_length, segment_per, anisotr
     centerline = spline_interpolate_centerline(
         skel.vertices[longest_path].astype(dtype) * anisotropy, path_length
     )
-    # centerline = interp_centerline(skel.vertices[longest_path], path_length)
+    # centerline = interp_centerline(skel.vertices[longest_path]*anisotropy, path_length)
     dist, closest_idx = get_closest(pc[:, :3], centerline)
+
+    cord_skel, T, N, B, dis_geo_skel = get_cord_skel(centerline)
+    assert cord_skel.shape == centerline.shape
 
     assert centerline.shape[0] == path_length
     assert np.max(closest_idx) < path_length
 
-    _, inverse, counts = np.unique(closest_idx, return_inverse=True, return_counts=True)
+    unique, inverse, counts = np.unique(
+        closest_idx, return_inverse=True, return_counts=True
+    )
     idx = np.argsort(inverse)
 
     closest_idx = closest_idx[idx]
     dist = dist[idx]
     pc = pc[idx]
 
-    cyd_pc, cord_skel = cylindrical_transformation(pc, centerline, dist, closest_idx)
-    assert cyd_pc.shape == pc.shape
-    assert cord_skel.shape == centerline.shape
+    cumsum = np.zeros(path_length, dtype=int)
+    cumsum[unique] = counts
+    cumsum = np.cumsum(cumsum)
 
-    # NOTE: split first, and only then do the cylinder magic, to avoid OOM errors
-
-    cumsum = np.cumsum(counts)
     split_idx = np.arange(0, path_length, segment_per)
     split_idx = cumsum[split_idx]
 
     pc_segments = np.split(pc, split_idx[1:])
-    cyd_pc_segments = np.split(cyd_pc, split_idx[1:])
+    closest_idx_segments = np.split(closest_idx, split_idx[1:])
+    dist_segments = np.split(dist, split_idx[1:])
+
+    # assert min([len(x) for x in pc_segments]) > 0
 
     result = {
         "skel": centerline,
         "skel_gnb": cord_skel,
+        "T": T,
+        "N": N,
+        "B": B,
+        "dis_geo_skel": dis_geo_skel,
     }
 
-    for i, (pc, cyd_pc) in enumerate(zip(pc_segments, cyd_pc_segments)):
-        result[f"pc_{i}"] = pc
-        result[f"pc_gnb_{i}"] = cyd_pc
+    for i, (pc, closest_idx, dist) in enumerate(
+        zip(pc_segments, closest_idx_segments, dist_segments)
+    ):
+        if len(pc) == 0:
+            print(f"Missing segment: {i}")
+            result[f"pc_{i}"] = -np.ones((1, 4))
+            result[f"dist_{i}"] = -np.ones((1,))
+            result[f"closest_idx_{i}"] = -np.ones((1,))
+        else:
+            result[f"pc_{i}"] = pc
+            result[f"dist_{i}"] = dist
+            result[f"closest_idx_{i}"] = closest_idx
+
+    return result
+
+
+@dask.delayed
+def cylindrical_segment_pc(pc, dist, closest_idx, centerline, T, N, B, dis_geo_skel):
+    if np.any(pc == -1):
+        return {"pc_gnb": -np.ones((1, 4))}
+    cyd_pc = cylindrical_transformation(
+        pc, centerline, dist, closest_idx, T, N, B, dis_geo_skel
+    )
+    assert cyd_pc.shape == pc.shape
+
+    result = {
+        "pc_gnb": cyd_pc,
+    }
 
     return result
 
@@ -64,11 +99,17 @@ def get_closest(pc_a, pc_b):
     # pc_b: (n,3)
     # return: (m) - the index of the closest point in pc_b for each point in pc_a
 
-    pc_a = pc_a.astype(np.float32)
-    pc_b = pc_b.astype(np.float32)
+    # pc_a = pc_a.astype(np.float64)
+    # pc_b = pc_b.astype(np.float64)
 
     tree = KDTree(pc_b)
-    dist, idx = tree.query(pc_a)
+    dist, idx = tree.query(pc_a, workers=-1)
+
+    if np.max(idx) >= pc_b.shape[0]:
+        np.save("/mmfs1/data/adhinart/dendrite/logs/pc_a.npy", pc_a)
+        np.save("/mmfs1/data/adhinart/dendrite/logs/pc_b.npy", pc_b)
+        raise ValueError("idx is out of range")
+
     return dist, idx
 
 
@@ -118,16 +159,8 @@ def interp_centerline(path, path_length):
     return points
 
 
-def cylindrical_transformation(pc, skel, dist, closest_idx):
-    # input pc [N, 3+1], smoothed_skel [S,3]
+def get_cord_skel(skel):
     T, N, B = frenet_frame(skel)
-
-    pc_skel = skel[closest_idx]
-    vec_tan = T[closest_idx]
-    vec_norm = N[closest_idx]
-    vec_binorm = B[closest_idx]
-
-    # skeleton
     dis_geo_skel_tmp = np.insert((((T ** 2).sum(1)) ** 0.5)[:-1], 0, 0)
     dis_geo_skel = np.zeros_like(dis_geo_skel_tmp)
     for i in range(dis_geo_skel.shape[0]):
@@ -138,6 +171,17 @@ def cylindrical_transformation(pc, skel, dist, closest_idx):
     cord_skel = np.concatenate(
         (cord_skel, np.zeros(dis_geo_skel.shape)[:, None]), axis=1
     )
+
+    return cord_skel, T, N, B, dis_geo_skel
+
+
+def cylindrical_transformation(pc, skel, dist, closest_idx, T, N, B, dis_geo_skel):
+    # input pc [N, 3+1], smoothed_skel [S,3]
+
+    pc_skel = skel[closest_idx]
+    vec_tan = T[closest_idx]
+    vec_norm = N[closest_idx]
+    vec_binorm = B[closest_idx]
 
     # non-skeleton
     dis_geo_pc = dis_geo_skel[closest_idx]
@@ -161,7 +205,7 @@ def cylindrical_transformation(pc, skel, dist, closest_idx):
     cyd_pc = np.concatenate((cyd_pc, dis_theta_pc[:, None]), axis=1)
     cyd_pc = np.concatenate((cyd_pc, pc[:, 3, None]), axis=1)
 
-    return cyd_pc, cord_skel
+    return cyd_pc
 
 
 def frenet_frame(skeleton):
@@ -277,14 +321,30 @@ def task_generate_point_cloud_segments(cfg, pc, skel):
 
     for i in range(num_segments):
         result[f"pc_{i}"] = da.from_delayed(
-            output[f"pc_{i}"], shape=(np.nan, 4), dtype=np.float32
+            output[f"pc_{i}"], shape=(np.nan, 4), dtype=np.float64
+        )
+        result[f"closest_idx_{i}"] = da.from_delayed(
+            output[f"closest_idx_{i}"], shape=(np.nan,), dtype=int
+        )
+        result[f"dist_{i}"] = da.from_delayed(
+            output[f"dist_{i}"], shape=(np.nan,), dtype=np.float64
+        )
+
+        cyd_output = cylindrical_segment_pc(
+            output[f"pc_{i}"],
+            output[f"dist_{i}"],
+            output[f"closest_idx_{i}"],
+            output["skel"],
+            output["T"],
+            output["N"],
+            output["B"],
+            output["dis_geo_skel"],
         )
         result[f"pc_gnb_{i}"] = da.from_delayed(
-            output[f"pc_gnb_{i}"], shape=(np.nan, 4), dtype=np.float32
+            cyd_output[f"pc_gnb"], shape=(np.nan, 4), dtype=np.float64
         )
 
     # result["skel"].compute(scheduler="single-threaded")
-    # __import__('pdb').set_trace()
 
     # don't bother with converting them to Dask arrays
     # results = {"segments" : segments}
