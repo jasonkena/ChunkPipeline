@@ -78,10 +78,13 @@ class DendritePipeline(Pipeline):
                 )
             )
             if i % 10 == 0:
+                # if i % 10 == 0:
                 print("Computing point cloud segments", i)
                 # this already uses ~ 500 GB of RAM
                 self.compute()
         self.compute()
+        print("done computing pre-export")
+        __import__("pdb").set_trace()
 
         # export skeletons
         skels = []

@@ -152,5 +152,9 @@ VESICLE__BIN_PATH = "/mmfs1/data/adhinart/vesicle/run.sh"
 # randomly wait X seconds before starting jobs
 VESICLE__STAGGER = 10
 
+# number of points in centerline interpolation
 FRENET__PATH_LENGTH = 3000
-FRENET__SEGMENT_PER = 500
+# segment length in real units (taking into account anisotropy)
+FRENET__WINDOW_LENGTH = 2000.0
+# stride length in real units (taking into account anisotropy)
+FRENET__STRIDE_LENGTH = 1000.0

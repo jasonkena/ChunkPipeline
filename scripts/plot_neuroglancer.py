@@ -13,7 +13,9 @@ viewer = neuroglancer.Viewer()
 
 # SNEMI (# 3d vol dim: z,y,x)
 res = neuroglancer.CoordinateSpace(
-    names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[80, 88, 88]
+    names=["z", "y", "x"],
+    units=["nm", "nm", "nm"],
+    scales=[80, 88, 88]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 6, 6]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 64, 64]
 )

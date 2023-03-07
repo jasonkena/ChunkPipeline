@@ -7,9 +7,23 @@ from scipy.interpolate import UnivariateSpline
 import dask
 import dask.array as da
 
+from chunk_pipeline.utils import object_array
+
 
 @dask.delayed
-def segment_pc(idx, spine, skel, longest_path, path_length, segment_per, anisotropy):
+def get_centerline(skel, longest_path, path_length, anisotropy):
+    dtype = np.float64
+    anisotropy = np.array(anisotropy).astype(dtype)
+
+    centerline = spline_interpolate_centerline(
+        skel.vertices[longest_path].astype(dtype) * anisotropy, path_length
+    )
+
+    return centerline
+
+
+@dask.delayed
+def segment_pc(idx, spine, centerline, path_length, anisotropy):
     dtype = np.float64
     anisotropy = np.array(anisotropy).astype(dtype)
     # idx: [n, 3]
@@ -19,10 +33,6 @@ def segment_pc(idx, spine, skel, longest_path, path_length, segment_per, anisotr
     # [n, 4]
     pc = np.concatenate([idx.astype(dtype) * anisotropy, spine[:, None]], axis=1)
 
-    centerline = spline_interpolate_centerline(
-        skel.vertices[longest_path].astype(dtype) * anisotropy, path_length
-    )
-    # centerline = interp_centerline(skel.vertices[longest_path]*anisotropy, path_length)
     dist, closest_idx = get_closest(pc[:, :3], centerline)
 
     cord_skel, T, N, B, dis_geo_skel = get_cord_skel(centerline)
@@ -44,7 +54,8 @@ def segment_pc(idx, spine, skel, longest_path, path_length, segment_per, anisotr
     cumsum[unique] = counts
     cumsum = np.cumsum(cumsum)
 
-    split_idx = np.arange(0, path_length, segment_per)
+    # split at every idx along longest_path
+    split_idx = np.arange(0, path_length, 1)
     split_idx = cumsum[split_idx]
 
     pc_segments = np.split(pc, split_idx[1:])
@@ -54,44 +65,41 @@ def segment_pc(idx, spine, skel, longest_path, path_length, segment_per, anisotr
     # assert min([len(x) for x in pc_segments]) > 0
 
     result = {
-        "skel": centerline,
         "skel_gnb": cord_skel,
         "T": T,
         "N": N,
         "B": B,
         "dis_geo_skel": dis_geo_skel,
+        "split": [],
     }
 
-    for i, (pc, closest_idx, dist) in enumerate(
-        zip(pc_segments, closest_idx_segments, dist_segments)
+    for (pc, closest_idx, dist) in zip(
+        pc_segments, closest_idx_segments, dist_segments
     ):
-        if len(pc) == 0:
-            print(f"Missing segment: {i}")
-            result[f"pc_{i}"] = -np.ones((1, 4))
-            result[f"dist_{i}"] = -np.ones((1,))
-            result[f"closest_idx_{i}"] = -np.ones((1,))
-        else:
-            result[f"pc_{i}"] = pc
-            result[f"dist_{i}"] = dist
-            result[f"closest_idx_{i}"] = closest_idx
+        # potentially empty
+        result["split"].append({"pc": pc, "dist": dist, "closest_idx": closest_idx})
+
+    result["split"] = object_array(result["split"])
 
     return result
 
 
-@dask.delayed
-def cylindrical_segment_pc(pc, dist, closest_idx, centerline, T, N, B, dis_geo_skel):
-    if np.any(pc == -1):
-        return {"pc_gnb": -np.ones((1, 4))}
+def cylindrical_segment_pc(split, centerline, T, N, B, dis_geo_skel):
+    split = split.item()
+    pc = split["pc"]
+    dist = split["dist"]
+    closest_idx = split["closest_idx"]
+
+    if pc.shape[0] == 0:
+        # return empty array
+        return object_array([pc])
+
     cyd_pc = cylindrical_transformation(
         pc, centerline, dist, closest_idx, T, N, B, dis_geo_skel
     )
     assert cyd_pc.shape == pc.shape
 
-    result = {
-        "pc_gnb": cyd_pc,
-    }
-
-    return result
+    return object_array([cyd_pc])
 
 
 def get_closest(pc_a, pc_b):
@@ -294,59 +302,124 @@ def normal_backwards(skeleton, idx_1):
     )
 
 
+@dask.delayed
+def merge_combined(array):
+    pc = [x["pc"] for x in array[:, 0]]
+    pc = np.concatenate(pc, axis=0)
+
+    if len(pc) == 0:
+        # return negative one if segment is empty
+        pc = -np.ones((1, 4))
+        return {"pc": pc, "pc_gnb": pc}
+
+    pc_gnb = array[:, 1].tolist()
+    pc_gnb = np.concatenate(pc_gnb, axis=0)
+
+    return {"pc": pc, "pc_gnb": pc_gnb}
+
+
+def stride_segments(combined, centerline, window_length, stride_length):
+    # centerline should already be computed (not delayed)
+
+    l2 = np.linalg.norm(centerline[1:] - centerline[:-1], axis=1)
+    cumsum = np.cumsum(l2)
+    cumsum = np.insert(cumsum, 0, 0)
+    total_length = cumsum[-1]
+
+    segments = []
+    idx = []
+
+    break_now = False
+    for start in np.arange(0, total_length, stride_length):
+        end = start + window_length
+        if end < total_length:
+            left = np.searchsorted(cumsum, start, side="left")
+            right = np.searchsorted(cumsum, end, side="right")
+            break_now = True
+        else:
+            start = total_length - window_length
+            left = np.searchsorted(cumsum, start, side="left")
+            right = cumsum.shape[0]
+
+        segments.append(combined[left:right])
+        if len(combined[left:right]) == 0:
+            print("empty segment")
+            __import__("pdb").set_trace()
+        idx.append([left, right])
+        if break_now:
+            break
+
+    return segments, idx
+
+
 def task_generate_point_cloud_segments(cfg, pc, skel):
     skel, longest_path = skel["skeleton"], skel["longest_path"]
     idx, spine = pc["idx"], pc["spine"]
 
     general = cfg["GENERAL"]
-    uint_dtype = general["UINT_DTYPE"]
+    # uint_dtype = general["UINT_DTYPE"]
     anisotropy = general["ANISOTROPY"]
     chunk_size = general["CHUNK_SIZE"]
     chunk_size = np.prod(chunk_size)
 
     frenet = cfg["FRENET"]
     path_length = frenet["PATH_LENGTH"]
-    segment_per = frenet["SEGMENT_PER"]
+    window_length = frenet["WINDOW_LENGTH"]
+    stride_length = frenet["STRIDE_LENGTH"]
+    # segment_per = frenet["SEGMENT_PER"]
+
+    centerline = get_centerline(skel, longest_path, path_length, anisotropy)
 
     # ceil
-    num_segments = np.ceil(path_length / segment_per).astype(int)
-    output = segment_pc(
-        idx, spine, skel, longest_path, path_length, segment_per, anisotropy
-    )
+    # num_segments = np.ceil(path_length / segment_per).astype(int)
+    output = segment_pc(idx, spine, centerline, path_length, anisotropy)
 
     result = {
-        "skel": output["skel"],
+        "skel": centerline,
         "skel_gnb": output["skel_gnb"],
     }
 
-    for i in range(num_segments):
-        result[f"pc_{i}"] = da.from_delayed(
-            output[f"pc_{i}"], shape=(np.nan, 4), dtype=np.float64
-        )
-        result[f"closest_idx_{i}"] = da.from_delayed(
-            output[f"closest_idx_{i}"], shape=(np.nan,), dtype=int
-        )
-        result[f"dist_{i}"] = da.from_delayed(
-            output[f"dist_{i}"], shape=(np.nan,), dtype=np.float64
-        )
+    splitted = da.from_delayed(
+        output["split"], shape=(path_length,), dtype=object
+    ).rechunk((1,))
+    cylindrical = da.map_blocks(
+        cylindrical_segment_pc,
+        splitted,
+        centerline,
+        output["T"],
+        output["N"],
+        output["B"],
+        output["dis_geo_skel"],
+        name="cylindrical",
+        dtype=object,
+    )
+    combined = da.stack([splitted, cylindrical], axis=1).rechunk((1, -1))
 
-        cyd_output = cylindrical_segment_pc(
-            output[f"pc_{i}"],
-            output[f"dist_{i}"],
-            output[f"closest_idx_{i}"],
-            output["skel"],
-            output["T"],
-            output["N"],
-            output["B"],
-            output["dis_geo_skel"],
+    # need to compute to calculate chunks
+    centerline = centerline.compute()
+
+    segments, split_idx = stride_segments(
+        combined, centerline, window_length, stride_length
+    )
+
+    result["split_idx"] = split_idx
+
+    for i, segment in enumerate(segments):
+        merged = merge_combined(segment)
+        result[f"pc_{i}"] = da.from_delayed(
+            merged["pc"], shape=(np.nan, 4), dtype=np.float64
         )
         result[f"pc_gnb_{i}"] = da.from_delayed(
-            cyd_output[f"pc_gnb"], shape=(np.nan, 4), dtype=np.float64
+            merged["pc_gnb"], shape=(np.nan, 4), dtype=np.float64
         )
 
-    # result["skel"].compute(scheduler="single-threaded")
+    #     result[f"closest_idx_{i}"] = da.from_delayed(
+    #         output[f"closest_idx_{i}"], shape=(np.nan,), dtype=int
+    #     )
+    #     result[f"dist_{i}"] = da.from_delayed(
+    #         output[f"dist_{i}"], shape=(np.nan,), dtype=np.float64
+    #     )
 
-    # don't bother with converting them to Dask arrays
-    # results = {"segments" : segments}
+    # result["skel"].compute(scheduler="single-threaded")
 
     return result
