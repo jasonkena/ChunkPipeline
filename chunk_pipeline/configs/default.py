@@ -133,18 +133,22 @@ FOUNDATION__GAUSSIAN_SIGMA = 3.0
 FOUNDATION__CONNECTIVITY = BASELINE__CONNECTIVITY
 
 NIB = None  # form {"name": filename}
+# junest cannot read /mmfs1 prefix
 l1_path = "/data/adhinart/L1-Skeleton"
-L1__IDS = list(range(1, 25))
 L1__BIN_PATH = f"junest {l1_path}/PointCloud/PointCloudL1"
-L1__JSON_PATH = f"{l1_path}/default_skeleton_config.json"
+# L1__JSON_PATH = f"{l1_path}/default_skeleton_config.json"
+# L1__JSON_PATH = f"{l1_path}/default_skeleton_config.json"
+L1__JSON_PATH = "/data/adhinart/dendrite/chunk_pipeline/configs/dendrite_skeleton_config.json"  # changed downsample num to 3000
+
 # junest can't read /scratch
 L1__TMP_DIR = f"{l1_path}/tmp"
-L1__STORE_TMP = False
-# noise pre downscaling
-L1__NOISE_STD = 5.0
-L1__DOWNSCALE_FACTOR = 0.01
+L1__STORE_TMP = True
+# noise pre downscaling, in voxel space (not nm)
+L1__NOISE_STD = 0.0  # determine this by eyeballing downsampled pointcloud
+# L1__NOISE_STD = 20.0 # determine this by eyeballing downsampled pointcloud
+L1__DOWNSCALE_FACTOR = 0.001
 # set to 0 to use all points
-L1__NUM_SAMPLE = 0
+L1__NUM_SAMPLE = 100000  # GUI example has 40000 points
 
 VESICLE__GLOB = ["/mmfs1/data/adhinart/vesicle/new_xiaomeng/*/*.tif"]  # ["*/*"]
 # VESICLE__GLOB = ["/mmfs1/data/adhinart/vesicle/new_im_vesicle/*.tif"]
@@ -155,6 +159,9 @@ VESICLE__STAGGER = 10
 # number of points in centerline interpolation
 FRENET__PATH_LENGTH = 3000
 # segment length in real units (taking into account anisotropy)
+# FRENET__WINDOW_LENGTH = 500.0
+# # stride length in real units (taking into account anisotropy)
+# FRENET__STRIDE_LENGTH = 500.0
+
 FRENET__WINDOW_LENGTH = 2000.0
-# stride length in real units (taking into account anisotropy)
 FRENET__STRIDE_LENGTH = 1000.0

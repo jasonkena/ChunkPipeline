@@ -175,6 +175,8 @@ def _aggregate_skels(all_skels, dust_threshold, tick_threshold, fuse_radius, row
 
 @dask.delayed
 def _longest_path(skel):
+    assert len(skel.components()) == 1, "Skeleton has multiple components"
+
     seed = skel_lib.find_furthest_pt(skel, 0, single=False)[0]
     longest_path = skel_lib.find_furthest_pt(skel, seed, single=False)[1][0]
     return longest_path

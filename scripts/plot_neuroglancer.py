@@ -15,7 +15,8 @@ viewer = neuroglancer.Viewer()
 res = neuroglancer.CoordinateSpace(
     names=["z", "y", "x"],
     units=["nm", "nm", "nm"],
-    scales=[80, 88, 88]
+    # scales=[30, 6, 6]
+    scales=[30, 8, 8]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 6, 6]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 64, 64]
 )
@@ -28,6 +29,15 @@ def ngLayer(data, res, oo=[0, 0, 0], tt="segmentation"):
         data, dimensions=res, volume_type=tt, voxel_offset=oo
     )
 
+def get_binary(raw, spine):
+    raw = raw.copy().astype(np.uint16)
+    spine = spine.copy()
+    max_idx = np.max(raw)
+
+    raw += ((spine>0) * (max_idx + 1)).astype(raw.dtype)
+
+    return raw
+
 
 # seg = h5py.File("r0.h5").get("seg")[:]
 # seg = h5py.File("/home/jason/Downloads/snemisubmissions/human/test-input.h5").get("main")[:]
@@ -37,8 +47,33 @@ def ngLayer(data, res, oo=[0, 0, 0], tt="segmentation"):
 # seg = zarr.open_group("/mmfs1/data/adhinart/dendrite/data/foundation_mouse_microns")["seg"]["seg"][:]
 # seg = zarr.open_group("/mmfs1/data/adhinart/dendrite/data/foundation_mouse_moritz")["seg"]["seg"][:]
 
-im = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("im")[:]
-seg = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("seg")[:]
+#im = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_raw.h5").get("main")[:]
+
+
+#
+# raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_raw.h5").get("main")[:,:4000,:4000]
+# raw = raw[::4,::4,::4]
+# print("done loading raw")
+# spine = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_spine.h5").get("main")[:, :4000, :4000]
+# spine = spine[::4,::4,::4]
+# print("done loading spine")
+# inst = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_seg.h5").get("main")[:, :4000, :4000]
+# inst = inst[::4,::4,::4]
+# binary = get_binary(raw, spine)
+#
+raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/mouse_raw.h5").get("main")[:]
+raw = raw[::4,::4,::4]
+print("done loading raw")
+spine = h5py.File("/mmfs1/data/adhinart/dendrite/raw/mouse_spine.h5").get("main")[:]
+spine = spine[::4,::4,::4]
+print("done loading spine")
+# inst = h5py.File("/mmfs1/data/adhinart/dendrite/raw/mouse_seg.h5").get("main")[:]
+# inst = inst[::4,::4,::4]
+binary = get_binary(raw, spine)
+#seg = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_seg.h5").get("main")[:]
+
+#im = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("im")[:]
+#seg = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("seg")[:]
 
 # im = h5py.File("r0.h5").get("original")[:]
 # seg = h5py.File("inferred_1.h5").get("main")[:].astype(np.uint8)
@@ -65,11 +100,13 @@ seg = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("seg"
 #     gt = np.array(fl['main']).astype(np.uint8)
 
 with viewer.txn() as s:
-    s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
+    #s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
     # s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
     # s.layers.append(name='gt',layer=ngLayer(gt,res,tt='segmentation'))
     # s.layers.append(name="seg", layer=ngLayer(gt, res, tt="segmentation"))
-    s.layers.append(name="seg", layer=ngLayer(seg, res, tt="segmentation"))
+    s.layers.append(name="bin", layer=ngLayer(binary, res, tt="segmentation"))
+    s.layers.append(name="seg", layer=ngLayer(raw, res, tt="segmentation"))
+    # s.layers.append(name="inst", layer=ngLayer(inst, res, tt="segmentation"))
     # Dd = "precomputed://https://rhoana.rc.fas.harvard.edu/ng/R0/im_64nm/"
     # s.layers["image"] = neuroglancer.ImageLayer(source=Dd)
 

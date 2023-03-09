@@ -71,6 +71,7 @@ def dask_run():
     # make dir
     os.makedirs(output_dir)
 
+    print("deleted")
     client = dask.distributed.Client(n_workers=10, threads_per_worker=1)
     print(client)
 
@@ -85,5 +86,4 @@ def dask_run():
 if __name__ == "__main__":
     # old_patch_output()
 
-    with ProgressBar():
-        dask_run()
+    dask_run()

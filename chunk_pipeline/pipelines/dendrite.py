@@ -8,6 +8,7 @@ from chunk_pipeline.tasks import (
     task_skeletonize,
     task_generate_point_cloud,
     task_generate_point_cloud_segments,
+    task_generate_l1_from_pc,
 )
 
 
@@ -40,6 +41,7 @@ class DendritePipeline(Pipeline):
             )
         self.compute()
         skeletons = []
+        # NOTE: kimimaro skeletons are broken
         for i in range(n):
             skeletons.append(
                 self.add(
@@ -64,7 +66,21 @@ class DendritePipeline(Pipeline):
             if i % 5 == 0:
                 print("Computing point cloud", i)
                 self.compute()
+        self.compute()
 
+        l1 = []
+        for i in range(n):
+            l1.append(
+                self.add(
+                    task_generate_l1_from_pc,
+                    f"l1_{i}",
+                    cfg_groups=["GENERAL", "L1"],
+                    depends_on=[point_clouds[i]],
+                )
+            )
+            # if i % 10 == 0:
+            #     print("Computing l1", i)
+            #     self.compute()
         self.compute()
 
         point_cloud_segments = []
@@ -74,7 +90,8 @@ class DendritePipeline(Pipeline):
                     task_generate_point_cloud_segments,
                     f"point_cloud_segments_{i}",
                     cfg_groups=["GENERAL", "FRENET"],
-                    depends_on=[point_clouds[i], skeletons[i]],
+                    depends_on=[point_clouds[i], l1[i]],
+                    # depends_on=[point_clouds[i], skeletons[i]],
                 )
             )
             if i % 10 == 0:

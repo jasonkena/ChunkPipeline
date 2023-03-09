@@ -6,18 +6,57 @@ from scipy.interpolate import UnivariateSpline
 
 import dask
 import dask.array as da
+import networkx as nx
 
 from chunk_pipeline.utils import object_array
 
 
-@dask.delayed
-def get_centerline(skel, longest_path, path_length, anisotropy):
-    dtype = np.float64
-    anisotropy = np.array(anisotropy).astype(dtype)
+def get_trunk_path(skel):
+    edges = []
+    for a, b in skel.edges:
+        l2 = np.linalg.norm(skel.vertices[a] - skel.vertices[b])
+        edges.append((a, b, l2))
 
-    centerline = spline_interpolate_centerline(
-        skel.vertices[longest_path].astype(dtype) * anisotropy, path_length
-    )
+    G = nx.Graph()
+    G.add_weighted_edges_from(edges)
+    assert nx.is_connected(G)
+
+    unique, counts = np.unique(skel.edges.reshape(-1), return_counts=True)
+    n_edges = np.ones(len(skel.vertices))
+    n_edges[unique] = counts
+
+    end_points = np.where(n_edges == 1)[0]
+    is_intersection = n_edges > 2
+
+    paths = []
+
+    assert len(end_points) >= 2
+    for i, a in enumerate(end_points[:-1]):
+        for j, b in enumerate(end_points[i + 1 :]):
+            try:  # since unique != np.arange(skel.vertices.shape[0]) for some reason
+                # can probably avoid calling this twice
+                path = nx.shortest_path(G, a, b, weight="weight")
+                length = nx.shortest_path_length(G, a, b, weight="weight")
+                # number of intersections as primary, length as tie breaker
+                weight = (np.sum(is_intersection[path]), length)
+
+                paths.append((path, weight))
+            except:
+                pass
+    paths = sorted(paths, key=lambda x: x[1])
+
+    return paths[-1][0]
+
+
+@dask.delayed
+def get_centerline(skel, path_length, anisotropy):
+    dtype = np.float64
+
+    anisotropy = np.array(anisotropy).astype(dtype)
+    skel.vertices = skel.vertices.astype(dtype) * anisotropy
+    trunk_path = get_trunk_path(skel)
+
+    centerline = spline_interpolate_centerline(skel.vertices[trunk_path], path_length)
 
     return centerline
 
@@ -320,7 +359,6 @@ def merge_combined(array):
 
 def stride_segments(combined, centerline, window_length, stride_length):
     # centerline should already be computed (not delayed)
-
     l2 = np.linalg.norm(centerline[1:] - centerline[:-1], axis=1)
     cumsum = np.cumsum(l2)
     cumsum = np.insert(cumsum, 0, 0)
@@ -335,11 +373,11 @@ def stride_segments(combined, centerline, window_length, stride_length):
         if end < total_length:
             left = np.searchsorted(cumsum, start, side="left")
             right = np.searchsorted(cumsum, end, side="right")
-            break_now = True
         else:
             start = total_length - window_length
             left = np.searchsorted(cumsum, start, side="left")
             right = cumsum.shape[0]
+            break_now = True
 
         segments.append(combined[left:right])
         if len(combined[left:right]) == 0:
@@ -353,7 +391,7 @@ def stride_segments(combined, centerline, window_length, stride_length):
 
 
 def task_generate_point_cloud_segments(cfg, pc, skel):
-    skel, longest_path = skel["skeleton"], skel["longest_path"]
+    skel = skel["skeleton"]
     idx, spine = pc["idx"], pc["spine"]
 
     general = cfg["GENERAL"]
@@ -368,7 +406,7 @@ def task_generate_point_cloud_segments(cfg, pc, skel):
     stride_length = frenet["STRIDE_LENGTH"]
     # segment_per = frenet["SEGMENT_PER"]
 
-    centerline = get_centerline(skel, longest_path, path_length, anisotropy)
+    centerline = get_centerline(skel, path_length, anisotropy)
 
     # ceil
     # num_segments = np.ceil(path_length / segment_per).astype(int)
