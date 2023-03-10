@@ -97,33 +97,36 @@ def get_seed(skel, longest_path, row):
     return vertices[longest_path].astype(int), radius[longest_path]
 
 
-def task_generate_point_cloud(cfg, extracted, skel):
+def task_generate_point_cloud(cfg, extracted):#, skel):
     general = cfg["GENERAL"]
-    pc = cfg["PC"]
+    # pc = cfg["PC"]
     row = extracted["row"]
     raw = extracted["raw"]
     spine = extracted["spine"]
-    boundary = get_boundary(raw)
+    seg = extracted["seg"]
+
+
+    # boundary = get_boundary(raw)
     # these are delayed objects
-    longest_path = skel["longest_path"]
-    skel = skel["skeleton"]
+    # longest_path = skel["longest_path"]
+    # skel = skel["skeleton"]
 
     # compute seed in extracted_seg coordinate system (as opposed to dataset coordinate system)
-    temp = get_seed(skel, longest_path, row)
-    seed, radius = temp[0], temp[1]  # since delayed objects cannot be unpacked
-    seed = da.from_delayed(seed, shape=(np.nan, 3), dtype=int)
-    radius = (
-        da.from_delayed(radius, shape=(np.nan,), dtype=float) + pc["TRUNK_RADIUS_DELTA"]
-    )
-
-    seeded = chunk.naive_chunk_seed(
-        raw.shape, seed, radius, general["CHUNK_SIZE"], float
-    )
-    expanded = sphere.get_expand_edt(seeded, general["ANISOTROPY"], da.max(radius))
+    # temp = get_seed(skel, longest_path, row)
+    # seed, radius = temp[0], temp[1]  # since delayed objects cannot be unpacked
+    # seed = da.from_delayed(seed, shape=(np.nan, 3), dtype=int)
+    # radius = (
+    #     da.from_delayed(radius, shape=(np.nan,), dtype=float) + pc["TRUNK_RADIUS_DELTA"]
+    # )
+    #
+    # seeded = chunk.naive_chunk_seed(
+    #     raw.shape, seed, radius, general["CHUNK_SIZE"], float
+    # )
+    # expanded = sphere.get_expand_edt(seeded, general["ANISOTROPY"], da.max(radius))
 
     idx, arrays = chunk_mask(
         raw,
-        [spine, boundary, expanded],
+        [spine, seg],
         row,
         general["CHUNK_SIZE"],
         general["UINT_DTYPE"],
@@ -132,7 +135,8 @@ def task_generate_point_cloud(cfg, extracted, skel):
     result = {}
     result["idx"] = idx
     result["spine"] = arrays[0]
+    result["seg"] = arrays[1]
     # result["boundary"] = arrays[1]
-    result["expanded"] = arrays[2]
+    # result["expanded"] = arrays[2]
 
     return result

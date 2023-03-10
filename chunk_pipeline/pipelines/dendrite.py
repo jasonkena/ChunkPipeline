@@ -40,19 +40,20 @@ class DendritePipeline(Pipeline):
                 )
             )
         self.compute()
-        skeletons = []
-        # NOTE: kimimaro skeletons are broken
-        for i in range(n):
-            skeletons.append(
-                self.add(
-                    task_skeletonize,
-                    f"skeleton_{i}",
-                    cfg_groups=["GENERAL", "KIMI"],
-                    depends_on=[extracted[i]],
-                )
-            )
-        self.compute()
 
+        # NOTE: kimimaro skeletons are broken
+        # skeletons = []
+        # for i in range(n):
+        #     skeletons.append(
+        #         self.add(
+        #             task_skeletonize,
+        #             f"skeleton_{i}",
+        #             cfg_groups=["GENERAL", "KIMI"],
+        #             depends_on=[extracted[i]],
+        #         )
+        #     )
+        # self.compute()
+        
         point_clouds = []
         for i in range(n):
             point_clouds.append(
@@ -60,14 +61,16 @@ class DendritePipeline(Pipeline):
                     task_generate_point_cloud,
                     f"point_cloud_{i}",
                     cfg_groups=["GENERAL", "PC"],
-                    depends_on=[extracted[i], skeletons[i]],
+                    depends_on=[extracted[i]],
                 )
             )
             if i % 5 == 0:
                 print("Computing point cloud", i)
                 self.compute()
         self.compute()
-
+        print("done computing point clouds")
+        __import__('pdb').set_trace()
+        #
         l1 = []
         for i in range(n):
             l1.append(
@@ -101,7 +104,6 @@ class DendritePipeline(Pipeline):
                 self.compute()
         self.compute()
         print("done computing pre-export")
-        __import__("pdb").set_trace()
 
         # export skeletons
         skels = []
@@ -110,12 +112,12 @@ class DendritePipeline(Pipeline):
         # export point clouds
         idxs = []
         spines = []
-        expanded = []
-
-        segments = []
-        segments_skel = []
-        segments_skel_gnb = []
-
+        seg = []
+        #
+        # segments = []
+        # segments_skel = []
+        # segments_skel_gnb = []
+        #
         import numpy as np
         import os
 
@@ -134,31 +136,32 @@ class DendritePipeline(Pipeline):
         #
 
         for i in range(n):
-            skels.append(self.load(f"skeleton_{i}/skeleton"))
-            longest_paths.append(self.load(f"skeleton_{i}/longest_path"))
+            # skels.append(self.load(f"skeleton_{i}/skeleton"))
+            # longest_paths.append(self.load(f"skeleton_{i}/longest_path"))
             idxs.append(f"point_cloud_{i}/idx")
             spines.append(f"point_cloud_{i}/spine")
-            expanded.append(f"point_cloud_{i}/expanded")
-            segments_skel.append(self.load(f"point_cloud_segments_{i}/skel"))
-            segments_skel_gnb.append(self.load(f"point_cloud_segments_{i}/skel_gnb_0"))
-            # segments_skel_gnb.append(self.load(f"point_cloud_segments_{i}/skel_gnb"))
-            for j in range(6):
-                segments.append(f"point_cloud_segments_{i}/pc_{j}")
-                segments.append(f"point_cloud_segments_{i}/pc_gnb_{j}")
-                segments.append(f"point_cloud_segments_{i}/closest_idx_{j}")
-                segments.append(f"point_cloud_segments_{i}/dist_{j}")
+            seg.append(f"point_cloud_{i}/seg")
+            # segments_skel.append(self.load(f"point_cloud_segments_{i}/skel"))
+            # segments_skel_gnb.append(self.load(f"point_cloud_segments_{i}/skel_gnb_0"))
+            # # segments_skel_gnb.append(self.load(f"point_cloud_segments_{i}/skel_gnb"))
+            # for j in range(6):
+            #     segments.append(f"point_cloud_segments_{i}/pc_{j}")
+            #     segments.append(f"point_cloud_segments_{i}/pc_gnb_{j}")
+            #     segments.append(f"point_cloud_segments_{i}/closest_idx_{j}")
+            #     segments.append(f"point_cloud_segments_{i}/dist_{j}")
 
         from chunk_pipeline.utils import object_array
 
-        skels = object_array(skels)
-        longest_paths = object_array(longest_paths)
-
-        self.export(
-            "pc_segments_skel.zip",
-            [segments_skel, segments_skel_gnb],
-            ["skel", "skel_gnb"],
-        )
+        # skels = object_array(skels)
+        # longest_paths = object_array(longest_paths)
+        #
+        # self.export(
+        #     "pc_segments_skel.zip",
+        #     [segments_skel, segments_skel_gnb],
+        #     ["skel", "skel_gnb"],
+        # )
+        self.export("pc.zip", idxs + spines + seg, idxs + spines + seg)
+        print("done pc")
         self.export("pc_segments.zip", segments, segments)
         self.export("skel.zip", [skels, longest_paths], ["skel", "longest_path"])
-        self.export("pc.zip", idxs + spines + expanded, idxs + spines + expanded)
         # self.export("pc_segments.zip", segments, segments)

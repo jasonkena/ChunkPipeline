@@ -62,7 +62,7 @@ def get_centerline(skel, path_length, anisotropy):
 
 
 @dask.delayed
-def segment_pc(idx, spine, centerline, path_length, anisotropy):
+def segment_pc(idx, spine, seg, centerline, path_length, anisotropy):
     dtype = np.float64
     anisotropy = np.array(anisotropy).astype(dtype)
     # idx: [n, 3]
@@ -70,7 +70,7 @@ def segment_pc(idx, spine, centerline, path_length, anisotropy):
 
     # get isotropic pc
     # [n, 4]
-    pc = np.concatenate([idx.astype(dtype) * anisotropy, spine[:, None]], axis=1)
+    pc = np.concatenate([idx.astype(dtype) * anisotropy, spine[:, None], seg[:, None] ], axis=1)
 
     dist, closest_idx = get_closest(pc[:, :3], centerline)
 
@@ -250,7 +250,7 @@ def cylindrical_transformation(pc, skel, dist, closest_idx, T, N, B, dis_geo_ske
 
     cyd_pc = np.concatenate((dis_geo_pc[:, None], dist[:, None]), axis=1)
     cyd_pc = np.concatenate((cyd_pc, dis_theta_pc[:, None]), axis=1)
-    cyd_pc = np.concatenate((cyd_pc, pc[:, 3, None]), axis=1)
+    cyd_pc = np.concatenate((cyd_pc, pc[:, 3:]), axis=1)
 
     return cyd_pc
 
@@ -392,7 +392,7 @@ def stride_segments(combined, centerline, window_length, stride_length):
 
 def task_generate_point_cloud_segments(cfg, pc, skel):
     skel = skel["skeleton"]
-    idx, spine = pc["idx"], pc["spine"]
+    idx, spine, seg = pc["idx"], pc["spine"], pc["seg"]
 
     general = cfg["GENERAL"]
     # uint_dtype = general["UINT_DTYPE"]
@@ -410,7 +410,7 @@ def task_generate_point_cloud_segments(cfg, pc, skel):
 
     # ceil
     # num_segments = np.ceil(path_length / segment_per).astype(int)
-    output = segment_pc(idx, spine, centerline, path_length, anisotropy)
+    output = segment_pc(idx, spine, seg, centerline, path_length, anisotropy)
 
     result = {
         "skel": centerline,

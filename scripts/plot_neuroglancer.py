@@ -17,6 +17,7 @@ res = neuroglancer.CoordinateSpace(
     units=["nm", "nm", "nm"],
     # scales=[30, 6, 6]
     scales=[30, 8, 8]
+    # scales=[60, 96, 96]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 6, 6]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 64, 64]
 )
@@ -38,6 +39,14 @@ def get_binary(raw, spine):
 
     return raw
 
+def get_inst(raw, seg, id):
+    import cc3d
+    raw = (raw == id).astype(np.uint16)
+    spines = cc3d.connected_components(seg == id)
+    raw = raw + spines
+    print(list(range(1, np.max(raw) + 1)))
+
+    return raw
 
 # seg = h5py.File("r0.h5").get("seg")[:]
 # seg = h5py.File("/home/jason/Downloads/snemisubmissions/human/test-input.h5").get("main")[:]
@@ -61,16 +70,22 @@ def get_binary(raw, spine):
 # inst = inst[::4,::4,::4]
 # binary = get_binary(raw, spine)
 #
-raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/mouse_raw.h5").get("main")[:]
+
+
+raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_raw.h5").get("main")[:]
 raw = raw[::4,::4,::4]
 print("done loading raw")
-spine = h5py.File("/mmfs1/data/adhinart/dendrite/raw/mouse_spine.h5").get("main")[:]
+spine = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_spine.h5").get("main")[:]
 spine = spine[::4,::4,::4]
 print("done loading spine")
 # inst = h5py.File("/mmfs1/data/adhinart/dendrite/raw/mouse_seg.h5").get("main")[:]
 # inst = inst[::4,::4,::4]
 binary = get_binary(raw, spine)
 #seg = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_seg.h5").get("main")[:]
+
+# raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_raw_96nm.h5").get("main")[:]
+# inst = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_spine_96nm.h5").get("main")[:]
+# inst = get_inst(raw, inst, 6)
 
 #im = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("im")[:]
 #seg = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("seg")[:]
@@ -105,7 +120,7 @@ with viewer.txn() as s:
     # s.layers.append(name='gt',layer=ngLayer(gt,res,tt='segmentation'))
     # s.layers.append(name="seg", layer=ngLayer(gt, res, tt="segmentation"))
     s.layers.append(name="bin", layer=ngLayer(binary, res, tt="segmentation"))
-    s.layers.append(name="seg", layer=ngLayer(raw, res, tt="segmentation"))
+    # s.layers.append(name="seg", layer=ngLayer(raw, res, tt="segmentation"))
     # s.layers.append(name="inst", layer=ngLayer(inst, res, tt="segmentation"))
     # Dd = "precomputed://https://rhoana.rc.fas.harvard.edu/ng/R0/im_64nm/"
     # s.layers["image"] = neuroglancer.ImageLayer(source=Dd)
