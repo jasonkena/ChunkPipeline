@@ -93,7 +93,9 @@ class Pipeline(ABC):
                 job_name=slurm["PROJECT_NAME"],
                 queue=slurm["PARTITIONS"],
                 cores=slurm["CORES_PER_JOB"],
-                memory=0,  # with --exclusive, this allocates all memory on node
+                # --mem=0 broken for some reason, added header_skip, see https://github.com/dask/dask-jobqueue/issues/497
+                # memory=0,  # with --exclusive, this allocates all memory on node
+                memory=f"{slurm['MEMORY_PER_JOB']}GiB",
                 scheduler_options={
                     "dashboard_address": f":{slurm['DASHBOARD_PORT']}",
                     "interface": "ib0",
@@ -124,11 +126,12 @@ class Pipeline(ABC):
                     f"{slurm['WALLTIME']*60-5}m",
                     "--lifetime-stagger",
                     "4m",
+                    # f"""--memory-limit=$(grep MemFree /proc/meminfo | awk '{{print $2, "/ 1000000 "}}' | bc)GiB""",
                     f"""--memory-limit=$(grep MemFree /proc/meminfo | awk '{{print $2, "/ 1000000 / {slurm["NUM_PROCESSES_PER_JOB"]} "}}' | bc)GiB""",
                 ],
                 log_directory=slurm["LOG_DIRECTORY"],
                 # allocate all CPUs and run only one job per node
-                job_extra_directives=["--exclusive"],
+                job_extra_directives=["--exclusive", "--gpus-per-node=0"],
             )
             if slurm_exists and not misc["ENABLE_MEMUSAGE"]
             else LocalCluster(
@@ -148,10 +151,11 @@ class Pipeline(ABC):
         # print(cluster.job_script())
         if slurm_exists:
             logging.info(
-                "Asking for {} cores, {} GiB of memory, {} processes per job on SLURM".format(
+                "Asking for {} cores, {} GiB of memory, {} processes per job on SLURM, {} threads per process".format(
                     slurm["CORES_PER_JOB"],
                     slurm["MEMORY_PER_JOB"],
                     slurm["NUM_PROCESSES_PER_JOB"],
+                    n_threads,
                 )
             )
             self.cluster.adapt(

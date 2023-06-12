@@ -97,7 +97,8 @@ COARSE__THRESHOLD_Z_SCORE = 1.0  # require score to be above mean + z_score * st
 
 # SLURM cluster config
 SLURM__PROJECT_NAME = "{TASK}"
-SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100"
+# SLURM__PARTITIONS = "full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
+SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
 SLURM__CORES_PER_JOB = 48
 
 # https://github.com/dask/dask-jobqueue/issues/181#issue-372752428
@@ -143,10 +144,10 @@ L1__JSON_PATH = "/data/adhinart/dendrite/chunk_pipeline/configs/dendrite_skeleto
 # junest can't read /scratch
 L1__TMP_DIR = f"{l1_path}/tmp"
 L1__STORE_TMP = True
-# noise pre downscaling, in voxel space (not nm)
+# noise in isotropic nm space (pre downscaling)
 L1__NOISE_STD = 0.0  # determine this by eyeballing downsampled pointcloud
 # L1__NOISE_STD = 20.0 # determine this by eyeballing downsampled pointcloud
-L1__DOWNSCALE_FACTOR = 0.001
+# L1__DOWNSCALE_FACTOR = 0.001
 # set to 0 to use all points
 L1__NUM_SAMPLE = 100000  # GUI example has 40000 points
 

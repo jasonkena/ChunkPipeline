@@ -162,28 +162,42 @@ def point_cloud_to_ply(pc, out_filename):
     return out_filename
 
 
+def calculate_downscale_factor(anisotropy, num_orig_points, num_downsampled_points):
+    # inspired by getInitRadiuse in DataMgr.cpp
+    # assuming isotropic data
+    cgrid = 0.2
+    unit_size = np.sqrt(np.sum(anisotropy)**2)
+    new_unit_size = unit_size * (num_orig_points / num_downsampled_points)**(1.0/3.0)
+    downscale_factor = cgrid / new_unit_size
+
+    # print("new_unit_size", new_unit_size)
+    # print("downscale_factor", downscale_factor)
+
+    return downscale_factor
+
+
 @dask.delayed
 def generate_l1_from_vol(vol, idx, *args, **kwargs):
-    # assumes isotropic volume
+    # assumes isotropic volume if aniostropy is None
+
+    kwargs = kwargs.copy()
 
     pc = np.argwhere(vol == idx)
-    return generate_l1(pc, *args, **kwargs)
-
-
-@dask.delayed
-def generate_l1_from_pc(pc, anisotropy, *args, **kwargs):
-    # assumes pc is still anisotropic, returns anisotropic skeleton
-
-    anisotropy = np.array(anisotropy)
-    # unit_size = np.sqrt(np.sum(anisotropy ** 2))
-    unit_size = 1  # cgrid radius is used as initial radius
-    pc = pc.astype(np.float64) * anisotropy / unit_size
-
     skel = generate_l1(pc, *args, **kwargs)
-    skel.vertices = skel.vertices * unit_size / anisotropy
 
     return skel
 
+
+@dask.delayed
+def generate_l1_from_pc(pc, *args, **kwargs):
+    # assumes pc is still dense anisotropic, returns anisotropic skeleton
+
+    # cgrid radius is used as initial radius
+    pc = pc.astype(np.float64)
+
+    skel = generate_l1(pc, *args, **kwargs)
+
+    return skel
 
 def generate_l1(
     pc,
@@ -191,13 +205,15 @@ def generate_l1(
     json_path,
     tmp_dir,
     store_tmp,
-    downscale_factor,
+    # downscale_factor,
     noise_std,
     num_sample,
-    percent_sample=0.01,
+    percent_sample=1,
     max_errors=5,
     error_upsample=1.5,
+    anisotropy=(1,1,1),
 ):
+    # NOTE: assumes anisotropic input, will multiply by anisotropy to get anisotropic data
     # on parse errors (skeleton not fully formed), undo some of the downscaling
     if num_sample > 0:
         num_sample = int(min(pc.shape[0], num_sample, pc.shape[0] * percent_sample))
@@ -205,13 +221,22 @@ def generate_l1(
     if len(pc) == 0:
         return Skeleton()
 
+
+    num_orig_points = pc.shape[0]
     np.random.seed(0)
     if (num_sample > 0) and (pc.shape[0] > num_sample):
         choice = np.random.choice(pc.shape[0], num_sample, replace=False)
         pc = pc[choice]
+    num_downsampled_points = pc.shape[0]
 
+    anisotropy = np.array(anisotropy)
+    pc *= anisotropy
+    # apply noise to isotropic PC
     pc = pc + np.random.normal(0, noise_std, pc.shape)
+
+    downscale_factor = calculate_downscale_factor(anisotropy, num_orig_points, num_downsampled_points)
     pc *= downscale_factor
+
 
     error_count = 0
     while True:
@@ -232,7 +257,7 @@ def generate_l1(
             # NOTE: this is a blocking call, can use subprocess.Popen to run in background
             call = subprocess.run(cmd.split(), stdout=tmp_log, stderr=tmp_log)
             if call.returncode != 0:
-                raise Exception(
+                logging.warning(
                     f"L1 skeletonization failed {ply_path} {skel_path} {json_path}"
                 )
 
@@ -241,9 +266,10 @@ def generate_l1(
                 break
             except Exception:
                 if error_count > max_errors:
-                    raise Exception(
-                        f"L1 parsing failed {ply_path} {skel_path} {json_path}, retrying"
+                    logging.warning(
+                        f"L1 parsing failed {ply_path} {skel_path} {json_path}, saving blank"
                     )
+                    return Skeleton()
                 else:
                     logging.warning(
                         f"L1 parsing failed {ply_path} {skel_path} {json_path} attempt {error_count}, retrying"
@@ -254,7 +280,7 @@ def generate_l1(
                     downscale_factor *= error_upsample
 
     skeleton = to_cloud_volume_skeleton(skel)
-    skeleton.vertices /= downscale_factor
+    skeleton.vertices /= downscale_factor * anisotropy
 
     skeleton = kimimaro.join_close_components(skeleton, radius=None)
 
@@ -262,6 +288,7 @@ def generate_l1(
 
 
 def task_generate_l1_from_vol(cfg, vols):
+    # NOTE: this assumes isotropic volume
     general = cfg["GENERAL"]
     l1 = cfg["L1"]
 
@@ -276,12 +303,34 @@ def task_generate_l1_from_vol(cfg, vols):
                 l1["JSON_PATH"],
                 l1["TMP_DIR"],
                 l1["STORE_TMP"],
-                l1["DOWNSCALE_FACTOR"],
+                # l1["DOWNSCALE_FACTOR"],
                 l1["NOISE_STD"],
                 l1["NUM_SAMPLE"],
             )
     return results
 
+def task_generate_snemi_l1_from_vol(cfg, vols):
+    general = cfg["GENERAL"]
+    anisotropy = general["ANISOTROPY"]
+    l1 = cfg["L1"]
+
+    results = {}
+    assert len(vols) == 1
+    vol = list(vols.values())[0]
+    for idx in l1["IDS"]:
+        results[idx] = generate_l1_from_vol(
+            vol,
+            idx,
+            l1["BIN_PATH"],
+            l1["JSON_PATH"],
+            l1["TMP_DIR"],
+            l1["STORE_TMP"],
+            # l1["DOWNSCALE_FACTOR"],
+            l1["NOISE_STD"],
+            l1["NUM_SAMPLE"],
+            anisotropy=anisotropy,
+        )
+    return results
 
 def task_generate_l1_from_pc(cfg, pc):
     # identical signature with task_skeletonize from generate_skeleton.py
@@ -294,14 +343,14 @@ def task_generate_l1_from_pc(cfg, pc):
     # l1["STORE_TMP"] = True
     skel = generate_l1_from_pc(
         idx,
-        anisotropy,
         l1["BIN_PATH"],
         l1["JSON_PATH"],
         l1["TMP_DIR"],
         l1["STORE_TMP"],
-        l1["DOWNSCALE_FACTOR"],
+        # l1["DOWNSCALE_FACTOR"],
         l1["NOISE_STD"],
         l1["NUM_SAMPLE"],
+        anisotropy=anisotropy,
     )
     longest_path = _longest_path(skel)
     result = {"skeleton": skel, "longest_path": longest_path}
