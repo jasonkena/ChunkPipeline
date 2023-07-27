@@ -1,16 +1,14 @@
 from chunk_pipeline.pipelines import Pipeline
-from chunk_pipeline.tasks import task_load_nib, task_generate_l1_from_vol
+from chunk_pipeline.tasks import task_generate_l1_from_npz
 
 
 class L1Pipeline(Pipeline):
     def run(self):
         # load main low res datasets
-        nib = self.add(task_load_nib, "nib", cfg_groups=["GENERAL", "NIB"])
         l1 = self.add(
-            task_generate_l1_from_vol,
+            task_generate_l1_from_npz,
             "l1",
-            cfg_groups=["GENERAL", "L1"],
-            depends_on=[nib],
+            cfg_groups=["GENERAL", "NPZ", "L1"],
         )
 
         self.compute()

@@ -98,7 +98,8 @@ COARSE__THRESHOLD_Z_SCORE = 1.0  # require score to be above mean + z_score * st
 # SLURM cluster config
 SLURM__PROJECT_NAME = "{TASK}"
 # SLURM__PARTITIONS = "full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
-SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
+SLURM__PARTITIONS = "shared,exclusive"
+# SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
 SLURM__CORES_PER_JOB = 48
 
 # https://github.com/dask/dask-jobqueue/issues/181#issue-372752428

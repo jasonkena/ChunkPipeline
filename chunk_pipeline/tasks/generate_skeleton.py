@@ -3,6 +3,8 @@ import numpy as np
 
 import kimimaro
 from skimage.measure import block_reduce
+import sys
+sys.path.append('../..')
 from skeleton import skel as skel_lib
 import scipy
 from cloudvolume import Skeleton
@@ -175,7 +177,9 @@ def _aggregate_skels(all_skels, dust_threshold, tick_threshold, fuse_radius, row
 
 @dask.delayed
 def _longest_path(skel):
-    assert len(skel.components()) == 1, "Skeleton has multiple components"
+    if len(skel.components()) != 1:
+        print("Skeleton has multiple components or is empty")
+        return None
 
     seed = skel_lib.find_furthest_pt(skel, 0, single=False)[0]
     longest_path = skel_lib.find_furthest_pt(skel, seed, single=False)[1][0]

@@ -7,7 +7,7 @@ import imageio
 import zarr
 
 ip = "localhost"  # or public IP of the machine for sharable display
-port = 8900
+port = 8901
 neuroglancer.set_server_bind_address(bind_address=ip, bind_port=port)
 viewer = neuroglancer.Viewer()
 
@@ -80,6 +80,7 @@ def get_vol(dataset, id, downsample=[1, 4, 4]):
 
 #im = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_raw.h5").get("main")[:]
 
+im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
 
 #
 # raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_raw.h5").get("main")[:,:4000,:4000]
@@ -111,7 +112,7 @@ def get_vol(dataset, id, downsample=[1, 4, 4]):
 # inst = get_inst(raw, inst, 6)
 
 
-inst, anisotropy = get_vol("human", 5)
+# inst, anisotropy = get_vol("human", 5)
 # inst, anisotropy = get_vol("seg_den", 5)
 
 #im = h5py.File("/mmfs1/data/adhinart/vesicle/new_im_vesicle/data.h5").get("im")[:]
@@ -145,8 +146,8 @@ inst, anisotropy = get_vol("human", 5)
 res = neuroglancer.CoordinateSpace(
     names=["z", "y", "x"],
     units=["nm", "nm", "nm"],
-    scales=anisotropy,
-    # scales=[30, 6, 6]
+    # scales=anisotropy,
+    scales=[30, 6, 6]
     # scales=[30, 8, 8]
     # scales=[60, 96, 96]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 6, 6]
@@ -156,12 +157,12 @@ res = neuroglancer.CoordinateSpace(
 
 with viewer.txn() as s:
     #s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
-    # s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
+    s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
     # s.layers.append(name='gt',layer=ngLayer(gt,res,tt='segmentation'))
     # s.layers.append(name="seg", layer=ngLayer(gt, res, tt="segmentation"))
     # s.layers.append(name="bin", layer=ngLayer(binary, res, tt="segmentation"))
     # s.layers.append(name="seg", layer=ngLayer(raw, res, tt="segmentation"))
-    s.layers.append(name="inst", layer=ngLayer(inst, res, tt="segmentation"))
+    # s.layers.append(name="inst", layer=ngLayer(inst, res, tt="segmentation"))
     # Dd = "precomputed://https://rhoana.rc.fas.harvard.edu/ng/R0/im_64nm/"
     # s.layers["image"] = neuroglancer.ImageLayer(source=Dd)
 

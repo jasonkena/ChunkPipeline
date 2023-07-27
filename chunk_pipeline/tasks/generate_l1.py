@@ -187,6 +187,14 @@ def generate_l1_from_vol(vol, idx, *args, **kwargs):
 
     return skel
 
+@dask.delayed
+def generate_l1_from_npz(filename, idx, input_key, seg_key, *args, **kwargs):
+    data = np.load(filename)
+    pc = data[input_key][data[seg_key] == idx].astype(np.float64)
+
+    skel = generate_l1(pc, *args, **kwargs)
+
+    return skel
 
 @dask.delayed
 def generate_l1_from_pc(pc, *args, **kwargs):
@@ -362,3 +370,37 @@ def task_generate_l1_from_pc(cfg, pc):
     # print("saved")
 
     return result
+
+def task_generate_l1_from_npz(cfg):
+    # identical signature with task_skeletonize from generate_skeleton.py
+    general = cfg["GENERAL"]
+    l1 = cfg["L1"]
+    npz = cfg["NPZ"]
+
+    # l1["STORE_TMP"] = True
+    results = {}
+    for key in npz:
+        filename, id, input_key, seg_key = npz[key]
+        skel = generate_l1_from_npz(
+            filename,
+            id,
+            input_key,
+            seg_key,
+            l1["BIN_PATH"],
+            l1["JSON_PATH"],
+            l1["TMP_DIR"],
+            l1["STORE_TMP"],
+            # l1["DOWNSCALE_FACTOR"],
+            l1["NOISE_STD"],
+            l1["NUM_SAMPLE"],
+        )
+        longest_path = _longest_path(skel)
+        results[key] = {"skeleton": skel, "longest_path": longest_path}
+
+    # __import__('pdb').set_trace()
+    # result = dask.compute(result, scheduler="single-threaded")
+    # __import__('pdb').set_trace()
+    # np.save("/mmfs1/data/adhinart/dumb/welp.npy", result)
+    # print("saved")
+
+    return results

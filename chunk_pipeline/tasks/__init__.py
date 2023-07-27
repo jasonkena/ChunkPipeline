@@ -9,6 +9,7 @@ from chunk_pipeline.tasks.generate_l1 import (
     task_generate_l1_from_vol,
     task_generate_snemi_l1_from_vol,
     task_generate_l1_from_pc,
+    task_generate_l1_from_npz,
 )
 from chunk_pipeline.tasks.vesicle import task_run_vesicle
 from chunk_pipeline.tasks.frenet import task_generate_point_cloud_segments
