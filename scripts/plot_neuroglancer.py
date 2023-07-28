@@ -81,6 +81,7 @@ def get_vol(dataset, id, downsample=[1, 4, 4]):
 #im = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_raw.h5").get("main")[:]
 
 im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
+seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
 
 #
 # raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_raw.h5").get("main")[:,:4000,:4000]
@@ -158,6 +159,7 @@ res = neuroglancer.CoordinateSpace(
 with viewer.txn() as s:
     #s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
     s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
+    s.layers.append(name="seg", layer=ngLayer(seg, res, tt="segmentation"))
     # s.layers.append(name='gt',layer=ngLayer(gt,res,tt='segmentation'))
     # s.layers.append(name="seg", layer=ngLayer(gt, res, tt="segmentation"))
     # s.layers.append(name="bin", layer=ngLayer(binary, res, tt="segmentation"))

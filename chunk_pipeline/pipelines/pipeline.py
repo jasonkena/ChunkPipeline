@@ -94,8 +94,10 @@ class Pipeline(ABC):
                 queue=slurm["PARTITIONS"],
                 cores=slurm["CORES_PER_JOB"],
                 # --mem=0 broken for some reason, added header_skip, see https://github.com/dask/dask-jobqueue/issues/497
-                # memory=0,  # with --exclusive, this allocates all memory on node
-                memory=f"{slurm['MEMORY_PER_JOB']}GiB",
+                job_mem="0GB",
+                memory=0,
+                # memory="0GB",  # with --exclusive, this allocates all memory on node
+                # memory=f"{slurm['MEMORY_PER_JOB']}GiB",
                 scheduler_options={
                     "dashboard_address": f":{slurm['DASHBOARD_PORT']}",
                     "interface": "ib0",

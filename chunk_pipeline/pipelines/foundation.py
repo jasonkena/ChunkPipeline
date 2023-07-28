@@ -6,6 +6,7 @@ class FoundationPipeline(Pipeline):
     def run(self):
         # load main low res datasets
         h5 = self.add(task_load_h5, "h5", cfg_groups=["GENERAL", "H5"])
+        self.compute()
         seg = self.add(
             task_foundation_seg,
             "seg",

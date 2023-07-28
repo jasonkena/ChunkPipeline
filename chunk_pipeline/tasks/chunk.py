@@ -6,7 +6,7 @@ import string
 import numpy as np
 import pandas as pd
 import cc3d
-from imu.io import get_bb_all3d
+from imu.io import compute_bbox_all_3d
 from unionfind import UnionFind
 
 import dask
@@ -183,7 +183,7 @@ def get_is_first_unique(array):
 
 def _chunk_bbox(vol, block_info):
     # add offset to bounding boxes based on zyx
-    bboxes = get_bb_all3d(vol)
+    bboxes = compute_bbox_all_3d(vol)
     bboxes[:, 1:3] += block_info[0]["array-location"][0][0]
     bboxes[:, 3:5] += block_info[0]["array-location"][1][0]
     bboxes[:, 5:7] += block_info[0]["array-location"][2][0]
@@ -395,8 +395,9 @@ def compute_remapping(uf_add, uf_union, partial_statistics, vol_shape, k):
     # number of old components
     num_components = np.max(mapping[:, -2])
     # +1 because of background
+    # int because of https://github.com/numpy/numpy/issues/20905
     remapping = np.zeros(
-        list(partial_statistics.shape) + [num_components + 1], dtype=mapping.dtype
+        list(partial_statistics.shape) + [int(num_components + 1)], dtype=mapping.dtype
     )
     remapping[:] = np.arange(num_components + 1)
 

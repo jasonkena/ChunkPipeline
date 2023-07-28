@@ -13,6 +13,8 @@ import math
 # dask.config.set({"distributed.comm.retry.count": 3})
 # dask.config.set({'distributed.scheduler.idle-timeout' : "5 minutes"})
 
+# dask.config.set({"distributed.scheduler.worker-saturation": 1.0})
+
 # __ to delimit hierarchy, read config.py
 TASK = None  # den_seg/mouse/human/etc. this als
 
@@ -98,7 +100,8 @@ COARSE__THRESHOLD_Z_SCORE = 1.0  # require score to be above mean + z_score * st
 # SLURM cluster config
 SLURM__PROJECT_NAME = "{TASK}"
 # SLURM__PARTITIONS = "full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
-SLURM__PARTITIONS = "shared,exclusive"
+SLURM__PARTITIONS = "weidf,gpua100,gpuv100,exclusive" # for some reason, if shared is included, it stalls everything
+# SLURM__PARTITIONS = "shared,exclusive"
 # SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
 SLURM__CORES_PER_JOB = 48
 
@@ -109,7 +112,7 @@ SLURM__NUM_PROCESSES_PER_JOB = 1
 # in GiB
 SLURM__MEMORY_PER_JOB = 170  # used only to compute number of threads
 # get this by running fil-profile run debug.py (max memory used by a task)
-SLURM__MEMORY_PER_TASK = 10  # to calculate number of threads per job
+SLURM__MEMORY_PER_TASK = 20  # to calculate number of threads per job
 
 # in hours
 SLURM__WALLTIME = 2
@@ -130,8 +133,12 @@ SLURM__LOG_DIRECTORY = "/mmfs1/data/adhinart/dendrite/logs"  # assuming only a s
 SLURM__INTERFACE = "ib0"
 
 # low res foundation datasets
-FOUNDATION__CHUNK_SIZE = (1, -1, -1)  # z-slice chunking
-FOUNDATION__GAUSSIAN_SIGMA = 3.0
+FOUNDATION__CHUNK_SIZE = (10, 512, 512)  # needs to be 10, otherwise it ruins mean and std calculations?
+FOUNDATION__IGNORE_BELOW_STD = 0.0
+FOUNDATION__GAUSSIAN_SIGMA = 1.0
+FOUNDATION__THRESHOLD_Z_SCORE = 3.0  # require score to be above mean + z_score * std
+FOUNDATION__DUST_THRESHOLD = 1000
+FOUNDATION__DUST_CONNECTIVITY = 6
 FOUNDATION__CONNECTIVITY = BASELINE__CONNECTIVITY
 
 NIB = None  # form {"name": filename}

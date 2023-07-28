@@ -50,22 +50,18 @@ def chunk_grey_erosion(vol, structure, uint_dtype):
 
 
 def _fill_and_remove_dust(vol, dust_threshold, dust_connectivity):
-    assert vol.shape[0] == 1
-    vol = nd.binary_fill_holes(vol[0])[np.newaxis, :, :]
+    vol = nd.binary_fill_holes(vol)
     vol = cc3d.dust(vol, threshold=dust_threshold, connectivity=dust_connectivity)
     return vol
 
 
 def fill_and_remove_dust(vol, dust_threshold, dust_connectivity):
-    original_chunks = vol.chunks
-    vol = da.rechunk(vol, chunks=(1, -1, -1))
     vol = vol.map_blocks(
         _fill_and_remove_dust,
         dtype=bool,
         dust_threshold=dust_threshold,
         dust_connectivity=dust_connectivity,
     )
-    vol = da.rechunk(vol, original_chunks)
     return vol
 
 

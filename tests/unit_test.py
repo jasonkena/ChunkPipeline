@@ -12,7 +12,7 @@ from chunk_pipeline.utils import pad_vol
 import math
 from multiprocessing.pool import ThreadPool
 
-from imu.io import get_bb_all3d
+from imu.io import compute_bbox_all_3d
 import opensimplex
 import edt
 import dask
@@ -25,9 +25,9 @@ import chunk_pipeline.tasks.sphere as sphere
 # import chunk_pipeline.tasks.inference as inference
 # import chunk_pipeline.tasks.evaluation as evaluation
 
-from stardist.data import test_image_nuclei_3d
+# from stardist.data import test_image_nuclei_3d
 from scipy.ndimage import rotate
-from stardist.matching import matching as stardist_matching
+# from stardist.matching import matching as stardist_matching
 
 from dask_jobqueue import SLURMCluster
 from dask.distributed import Client
@@ -100,7 +100,7 @@ class ChunkTest(unittest.TestCase):
         chunk_size = (9, 8, 7)
 
         input = np.random.randint(0, 2 ** 16 - 1, shape)
-        gt = get_bb_all3d(input)
+        gt = compute_bbox_all_3d(input)
 
         output = chunk.chunk_bbox(da.from_array(input, chunks=chunk_size)).compute()
         self.assertTrue(np.array_equal(output, gt))
@@ -111,12 +111,16 @@ class ChunkTest(unittest.TestCase):
         connectivity = 26
         k = 13
 
-        input = np.random.rand(*shape) > 0.8
+        # input = np.random.rand(*shape) > 0.8
+        input = np.zeros(shape, dtype=bool)
+        # input[0,0,0]=True
+        input[1,1,1]=True
 
         output = chunk.chunk_cc3d(
             da.from_array(input, chunks=chunk_size),
             connectivity,
             k,
+            uint_dtype=np.uint8
         )
         output = dask.compute(*output)
 
@@ -128,9 +132,13 @@ class ChunkTest(unittest.TestCase):
         # cannot evaluate whether cc3d is equal because ordering cannot be guaranteed
         self.assertTrue(np.array_equal(output[1], statistics))
         # check whether k filtering causes incorrect results
+        
+        new_voxel_counts = cc3d.statistics(output[0].astype(np.uint))["voxel_counts"]
+        print(output[1])
+        print(new_voxel_counts)
         self.assertTrue(
             np.array_equal(
-                output[1], cc3d.statistics(output[0].astype(np.uint))["voxel_counts"]
+                output[1], new_voxel_counts
             )
         )
 
