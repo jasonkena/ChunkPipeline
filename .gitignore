@@ -6,3 +6,4 @@ old/
 *.out
 dask-worker-space/
 __pycache__/
+scripts/

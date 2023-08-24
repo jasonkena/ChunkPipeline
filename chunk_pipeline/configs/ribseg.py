@@ -3,7 +3,7 @@ import glob
 TASK = "ribseg"
 
 data_path = "/data/adhinart/ribseg/outputs/dgcnn_two_stage_preprocessed"
-GENERAL__ANISOTROPY = (1,1,1) # isotropic data
+GENERAL__ANISOTROPY = (1, 1, 1)  # isotropic data
 
 # set to 0 to use all points
 L1__NOISE_STD = 0.0

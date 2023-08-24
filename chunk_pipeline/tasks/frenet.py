@@ -70,7 +70,9 @@ def segment_pc(idx, spine, seg, centerline, path_length, anisotropy):
 
     # get isotropic pc
     # [n, 4]
-    pc = np.concatenate([idx.astype(dtype) * anisotropy, spine[:, None], seg[:, None] ], axis=1)
+    pc = np.concatenate(
+        [idx.astype(dtype) * anisotropy, spine[:, None], seg[:, None]], axis=1
+    )
 
     dist, closest_idx = get_closest(pc[:, :3], centerline)
 
@@ -112,9 +114,7 @@ def segment_pc(idx, spine, seg, centerline, path_length, anisotropy):
         "split": [],
     }
 
-    for (pc, closest_idx, dist) in zip(
-        pc_segments, closest_idx_segments, dist_segments
-    ):
+    for pc, closest_idx, dist in zip(pc_segments, closest_idx_segments, dist_segments):
         # potentially empty
         result["split"].append({"pc": pc, "dist": dist, "closest_idx": closest_idx})
 
@@ -208,7 +208,7 @@ def interp_centerline(path, path_length):
 
 def get_cord_skel(skel):
     T, N, B = frenet_frame(skel)
-    dis_geo_skel_tmp = np.insert((((T ** 2).sum(1)) ** 0.5)[:-1], 0, 0)
+    dis_geo_skel_tmp = np.insert((((T**2).sum(1)) ** 0.5)[:-1], 0, 0)
     dis_geo_skel = np.zeros_like(dis_geo_skel_tmp)
     for i in range(dis_geo_skel.shape[0]):
         dis_geo_skel[i] = dis_geo_skel_tmp[: i + 1].sum()
@@ -234,15 +234,15 @@ def cylindrical_transformation(pc, skel, dist, closest_idx, T, N, B, dis_geo_ske
     dis_geo_pc = dis_geo_skel[closest_idx]
 
     t = ((pc_skel * vec_tan).sum(1) - (pc[:, :3] * vec_tan).sum(1)) / (
-        (vec_tan ** 2).sum(1)
+        (vec_tan**2).sum(1)
     )
     pc_proj = pc[:, :3] + t[:, None] * vec_tan
     vec_proj = pc_proj - pc_skel
     cos_norm = (vec_norm * vec_proj).sum(1) / (
-        (vec_norm ** 2).sum(1) + (vec_proj ** 2).sum(1)
+        (vec_norm**2).sum(1) + (vec_proj**2).sum(1)
     )
     cos_binorm = (vec_binorm * vec_proj).sum(1) / (
-        (vec_binorm ** 2).sum(1) + (vec_proj ** 2).sum(1)
+        (vec_binorm**2).sum(1) + (vec_proj**2).sum(1)
     )
     cos_binorm[cos_binorm >= 0] = 1
     cos_binorm[cos_binorm < 0] = -1
@@ -304,9 +304,7 @@ def frenet_frame(skeleton):
             idx = idx_v_line[-1] - 1
             while idx in idx_v_line[::-1]:
                 idx -= 1
-            normal[idx:,] = normal[
-                idx,
-            ]  # optimize
+            normal[idx:,] = normal[idx,]  # optimize
     # backward assign normal - intermediate vertice
     idx_v_line = np.argwhere(
         (normal[:, 0] == 0) * (normal[:, 1] == 0) * (normal[:, 2] == 0)

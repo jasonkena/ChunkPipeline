@@ -97,10 +97,15 @@ COARSE__DUST_CONNECTIVITY = 6
 COARSE__CONNECTIVITY = BASELINE__CONNECTIVITY  # for connected components
 COARSE__THRESHOLD_Z_SCORE = 1.0  # require score to be above mean + z_score * std
 
+VESSEL__EROSION_STRUCTURE = np.ones([5, 5, 5], dtype=bool).tolist()
+VESSEL__DUST_THRESHOLD = 100
+VESSEL__DUST_CONNECTIVITY = 6
+VESSEL__CONNECTIVITY = BASELINE__CONNECTIVITY
+
 # SLURM cluster config
 SLURM__PROJECT_NAME = "{TASK}"
 # SLURM__PARTITIONS = "full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
-SLURM__PARTITIONS = "weidf,gpua100,gpuv100,exclusive" # for some reason, if shared is included, it stalls everything
+SLURM__PARTITIONS = "weidf,gpua100,gpuv100,exclusive"  # for some reason, if shared is included, it stalls everything
 # SLURM__PARTITIONS = "shared,exclusive"
 # SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
 SLURM__CORES_PER_JOB = 48
@@ -133,7 +138,11 @@ SLURM__LOG_DIRECTORY = "/mmfs1/data/adhinart/dendrite/logs"  # assuming only a s
 SLURM__INTERFACE = "ib0"
 
 # low res foundation datasets
-FOUNDATION__CHUNK_SIZE = (10, 512, 512)  # needs to be 10, otherwise it ruins mean and std calculations?
+FOUNDATION__CHUNK_SIZE = (
+    10,
+    512,
+    512,
+)  # needs to be 10, otherwise it ruins mean and std calculations?
 FOUNDATION__IGNORE_BELOW_STD = 0.0
 FOUNDATION__GAUSSIAN_SIGMA = 1.0
 FOUNDATION__THRESHOLD_Z_SCORE = 3.0  # require score to be above mean + z_score * std

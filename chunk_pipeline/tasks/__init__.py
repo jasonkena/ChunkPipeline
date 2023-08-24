@@ -13,3 +13,4 @@ from chunk_pipeline.tasks.generate_l1 import (
 )
 from chunk_pipeline.tasks.vesicle import task_run_vesicle
 from chunk_pipeline.tasks.frenet import task_generate_point_cloud_segments
+from chunk_pipeline.tasks.vessel import task_clean_sam

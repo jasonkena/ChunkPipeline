@@ -53,10 +53,10 @@ class DendritePipeline(Pipeline):
         #         )
         #     )
         # self.compute()
-        
+
         point_clouds = []
         # for i in range(n):
-        for i in range(34,47):
+        for i in range(34, 47):
             point_clouds.append(
                 self.add(
                     task_generate_point_cloud,
@@ -70,7 +70,7 @@ class DendritePipeline(Pipeline):
                 self.compute()
         self.compute()
         print("done computing point clouds")
-        __import__('pdb').set_trace()
+        __import__("pdb").set_trace()
         #
         l1 = []
         for i in range(n):

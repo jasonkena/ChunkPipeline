@@ -25,6 +25,7 @@ import numcodecs
 import logging
 from dask_memusage import install
 
+
 # https://stackoverflow.com/questions/952914/how-do-i-make-a-flat-list-out-of-a-list-of-lists
 def flatten(l):
     return [item for sublist in l for item in sublist]

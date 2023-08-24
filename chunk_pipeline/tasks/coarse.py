@@ -30,22 +30,25 @@ def fill_blanks(is_valid):
     return idx
 
 
-def _chunk_grey_erosion(vol, structure):
-    return [nd.grey_erosion(vol, structure=structure)]
+def _chunk_grey_erode_or_dilate(vol, structure, operation):
+    func = nd.grey_dilation if operation == "dilate" else nd.grey_erosion
+    return [func(vol, structure=structure)]
 
 
-def chunk_grey_erosion(vol, structure, uint_dtype):
+def chunk_grey_erode_or_dilate(vol, structure, uint_dtype, operation):
+    assert operation in ["erode", "dilate"]
     structure = np.array(structure)
     assert [i % 2 == 1 for i in structure.shape]
     pad_width = [(x - 1) // 2 for x in structure.shape]
 
     return chunk.chunk(
-        _chunk_grey_erosion,
+        _chunk_grey_erode_or_dilate,
         [vol],
         output_dataset_dtypes=[uint_dtype],
         pad="extend",
         pad_width=tuple(pad_width),
         structure=structure,
+        operation=operation,
     )
 
 
@@ -121,7 +124,9 @@ def task_coarse_segment(cfg, original):
         original["uint_dtype"],
     )
 
-    eroded = chunk_grey_erosion(original, coarse["EROSION_STRUCTURE"], uint_dtype)
+    eroded = chunk_grey_erode_or_dilate(
+        original, coarse["EROSION_STRUCTURE"], uint_dtype, operation="erode"
+    )
 
     thresholded = eroded > (
         da.mean(eroded) + coarse["THRESHOLD_Z_SCORE"] * da.std(eroded)

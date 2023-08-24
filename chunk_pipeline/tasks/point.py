@@ -97,14 +97,13 @@ def get_seed(skel, longest_path, row):
     return vertices[longest_path].astype(int), radius[longest_path]
 
 
-def task_generate_point_cloud(cfg, extracted):#, skel):
+def task_generate_point_cloud(cfg, extracted):  # , skel):
     general = cfg["GENERAL"]
     # pc = cfg["PC"]
     row = extracted["row"]
     raw = extracted["raw"]
     spine = extracted["spine"]
     seg = extracted["seg"]
-
 
     # boundary = get_boundary(raw)
     # these are delayed objects

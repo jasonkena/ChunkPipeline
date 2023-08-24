@@ -4,7 +4,8 @@ import numpy as np
 import kimimaro
 from skimage.measure import block_reduce
 import sys
-sys.path.append('../..')
+
+sys.path.append("../..")
 from skeleton import skel as skel_lib
 import scipy
 from cloudvolume import Skeleton
@@ -107,7 +108,7 @@ def fast_join_close_components(skeletons, radius=None):
                 results[(i, j)] = _fast_join_close_components_kernel(skels[i], skels[j])
         results = dask.compute(results)[0]
 
-        for (i, j) in results:
+        for i, j in results:
             radii, index = results[(i, j)]
             radii_matrix[i, j] = radii
             radii_matrix[j, i] = radii

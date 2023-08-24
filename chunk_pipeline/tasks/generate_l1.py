@@ -166,8 +166,10 @@ def calculate_downscale_factor(anisotropy, num_orig_points, num_downsampled_poin
     # inspired by getInitRadiuse in DataMgr.cpp
     # assuming isotropic data
     cgrid = 0.2
-    unit_size = np.sqrt(np.sum(anisotropy)**2)
-    new_unit_size = unit_size * (num_orig_points / num_downsampled_points)**(1.0/3.0)
+    unit_size = np.sqrt(np.sum(anisotropy) ** 2)
+    new_unit_size = unit_size * (num_orig_points / num_downsampled_points) ** (
+        1.0 / 3.0
+    )
     downscale_factor = cgrid / new_unit_size
 
     # print("new_unit_size", new_unit_size)
@@ -187,6 +189,7 @@ def generate_l1_from_vol(vol, idx, *args, **kwargs):
 
     return skel
 
+
 @dask.delayed
 def generate_l1_from_npz(filename, idx, input_key, seg_key, *args, **kwargs):
     data = np.load(filename)
@@ -195,6 +198,7 @@ def generate_l1_from_npz(filename, idx, input_key, seg_key, *args, **kwargs):
     skel = generate_l1(pc, *args, **kwargs)
 
     return skel
+
 
 @dask.delayed
 def generate_l1_from_pc(pc, *args, **kwargs):
@@ -206,6 +210,7 @@ def generate_l1_from_pc(pc, *args, **kwargs):
     skel = generate_l1(pc, *args, **kwargs)
 
     return skel
+
 
 def generate_l1(
     pc,
@@ -219,7 +224,7 @@ def generate_l1(
     percent_sample=1,
     max_errors=5,
     error_upsample=1.5,
-    anisotropy=(1,1,1),
+    anisotropy=(1, 1, 1),
 ):
     # NOTE: assumes anisotropic input, will multiply by anisotropy to get anisotropic data
     # on parse errors (skeleton not fully formed), undo some of the downscaling
@@ -228,7 +233,6 @@ def generate_l1(
 
     if len(pc) == 0:
         return Skeleton()
-
 
     num_orig_points = pc.shape[0]
     np.random.seed(0)
@@ -242,9 +246,10 @@ def generate_l1(
     # apply noise to isotropic PC
     pc = pc + np.random.normal(0, noise_std, pc.shape)
 
-    downscale_factor = calculate_downscale_factor(anisotropy, num_orig_points, num_downsampled_points)
+    downscale_factor = calculate_downscale_factor(
+        anisotropy, num_orig_points, num_downsampled_points
+    )
     pc *= downscale_factor
-
 
     error_count = 0
     while True:
@@ -317,6 +322,7 @@ def task_generate_l1_from_vol(cfg, vols):
             )
     return results
 
+
 def task_generate_snemi_l1_from_vol(cfg, vols):
     general = cfg["GENERAL"]
     anisotropy = general["ANISOTROPY"]
@@ -339,6 +345,7 @@ def task_generate_snemi_l1_from_vol(cfg, vols):
             anisotropy=anisotropy,
         )
     return results
+
 
 def task_generate_l1_from_pc(cfg, pc):
     # identical signature with task_skeletonize from generate_skeleton.py
@@ -370,6 +377,7 @@ def task_generate_l1_from_pc(cfg, pc):
     # print("saved")
 
     return result
+
 
 def task_generate_l1_from_npz(cfg):
     # identical signature with task_skeletonize from generate_skeleton.py

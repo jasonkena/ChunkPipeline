@@ -80,8 +80,26 @@ def get_vol(dataset, id, downsample=[1, 4, 4]):
 
 #im = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_raw.h5").get("main")[:]
 
-im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
-seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
+# # im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
+# # seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
+# im = h5py.File("/data/bccv/dataset/foundation/low_res/human_h01_256-264nm.h5").get("main")[:,5000:5000+512,5000:5000+512]
+# seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_human/foundation.zip")["seg"][:,5000:5000+512,5000:5000+512]
+# # im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
+# # seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
+# # im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
+# # seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
+# # im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
+# # seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
+
+# id = "200_1600_1080"
+# im = h5py.File(f"/scratch/wanjr/mouse/mouse_errors/{id}_img.h5").get("main")[:]
+# seg = h5py.File(f"/scratch/wanjr/mouse/mouse_errors/{id}_pred.h5").get("main")[:]
+seg = zarr.open_group("/data/adhinart/dendrite/data/vessel/cleaned_sam.zip")["seg"][:]
+seg = seg[260*4:320*4,910*4:1010*4,380*4:460*4]
+# seg = seg[:500, :500, :500]
+# seg = h5py.File("/scratch/wanjr/mouse/mouse_final_seg_mobile_all_clean.h5").get("main")[:]
+# seg = seg[::4,::4,::4]
+# seg = seg.astype(np.uint8) # need this for the h5
 
 #
 # raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_raw.h5").get("main")[:,:4000,:4000]
@@ -148,7 +166,8 @@ res = neuroglancer.CoordinateSpace(
     names=["z", "y", "x"],
     units=["nm", "nm", "nm"],
     # scales=anisotropy,
-    scales=[30, 6, 6]
+    scales=[1, 1, 1],
+    # scales=[30, 6, 6]
     # scales=[30, 8, 8]
     # scales=[60, 96, 96]
     # names=["z", "y", "x"], units=["nm", "nm", "nm"], scales=[30, 6, 6]
@@ -158,7 +177,7 @@ res = neuroglancer.CoordinateSpace(
 
 with viewer.txn() as s:
     #s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
-    s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
+    # s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
     s.layers.append(name="seg", layer=ngLayer(seg, res, tt="segmentation"))
     # s.layers.append(name='gt',layer=ngLayer(gt,res,tt='segmentation'))
     # s.layers.append(name="seg", layer=ngLayer(gt, res, tt="segmentation"))
