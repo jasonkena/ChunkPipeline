@@ -93,13 +93,15 @@ def get_vol(dataset, id, downsample=[1, 4, 4]):
 
 # id = "200_1600_1080"
 # im = h5py.File(f"/scratch/wanjr/mouse/mouse_errors/{id}_img.h5").get("main")[:]
-# seg = h5py.File(f"/scratch/wanjr/mouse/mouse_errors/{id}_pred.h5").get("main")[:]
+# orig = h5py.File(f"/scratch/wanjr/mouse/mouse_errors/{id}_pred.h5").get("main")[:]
 seg = zarr.open_group("/data/adhinart/dendrite/data/vessel/cleaned_sam.zip")["seg"][:]
-seg = seg[260*4:320*4,910*4:1010*4,380*4:460*4]
+seg = seg[370*4:410*4, 250*4:390*4, 375*4:530*4]
+# seg = seg[260*4:320*4,910*4:1010*4,380*4:460*4]
 # seg = seg[:500, :500, :500]
-# seg = h5py.File("/scratch/wanjr/mouse/mouse_final_seg_mobile_all_clean.h5").get("main")[:]
 # seg = seg[::4,::4,::4]
-# seg = seg.astype(np.uint8) # need this for the h5
+orig = h5py.File("/scratch/wanjr/mouse/mouse_final_seg_mobile_all_clean.h5").get("main")[:]
+orig = orig[370*4:410*4, 250*4:390*4, 375*4:530*4]
+orig = orig.astype(np.uint8) # need this for the h5
 
 #
 # raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_raw.h5").get("main")[:,:4000,:4000]
@@ -179,6 +181,7 @@ with viewer.txn() as s:
     #s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
     # s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
     s.layers.append(name="seg", layer=ngLayer(seg, res, tt="segmentation"))
+    s.layers.append(name="orig", layer=ngLayer(orig, res, tt="segmentation"))
     # s.layers.append(name='gt',layer=ngLayer(gt,res,tt='segmentation'))
     # s.layers.append(name="seg", layer=ngLayer(gt, res, tt="segmentation"))
     # s.layers.append(name="bin", layer=ngLayer(binary, res, tt="segmentation"))

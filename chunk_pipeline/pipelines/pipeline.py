@@ -151,7 +151,7 @@ class Pipeline(ABC):
         self.client = Client(self.cluster)
 
         logging.info(self.cluster.dashboard_link)
-        # print(cluster.job_script())
+        # print(self.cluster.job_script())
         if slurm_exists:
             logging.info(
                 "Asking for {} cores, {} GiB of memory, {} processes per job on SLURM, {} threads per process".format(

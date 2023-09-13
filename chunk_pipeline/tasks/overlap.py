@@ -3,6 +3,7 @@ import dask.array as da
 
 import chunk_pipeline.tasks.chunk as chunk
 
+
 def _chunk_overlap(x, depth):
     # get slices for neighbors
     results = []
@@ -19,3 +20,4 @@ def _chunk_overlap(x, depth):
 
 
 def chunk_overlap(x, depth):
+    pass

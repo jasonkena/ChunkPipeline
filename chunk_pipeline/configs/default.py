@@ -97,16 +97,16 @@ COARSE__DUST_CONNECTIVITY = 6
 COARSE__CONNECTIVITY = BASELINE__CONNECTIVITY  # for connected components
 COARSE__THRESHOLD_Z_SCORE = 1.0  # require score to be above mean + z_score * std
 
-VESSEL__EROSION_STRUCTURE = np.ones([5, 5, 5], dtype=bool).tolist()
-VESSEL__DUST_THRESHOLD = 100
-VESSEL__DUST_CONNECTIVITY = 6
+# anisotropy (1, 1, 1)
+VESSEL__MAX_ERODE = 5
+VESSEL__ERODE_DELTA = 5
 VESSEL__CONNECTIVITY = BASELINE__CONNECTIVITY
 
 # SLURM cluster config
 SLURM__PROJECT_NAME = "{TASK}"
 # SLURM__PARTITIONS = "full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
-SLURM__PARTITIONS = "weidf,gpua100,gpuv100,exclusive"  # for some reason, if shared is included, it stalls everything
-# SLURM__PARTITIONS = "shared,exclusive"
+# SLURM__PARTITIONS = "weidf,gpua100,gpuv100,exclusive"  # for some reason, if shared is included, it overrides everything else
+SLURM__PARTITIONS = "shared"
 # SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
 SLURM__CORES_PER_JOB = 48
 
