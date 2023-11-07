@@ -24,3 +24,10 @@ def task_clean_sam(cfg, h5):
     )
 
     return {"seg": cc, "voxel_counts": voxel_counts}
+
+
+def task_vessel_cc(cfg, h5):
+    general = cfg["GENERAL"]
+    vessel = cfg["VESSEL"]
+
+    __import__("pdb").set_trace()

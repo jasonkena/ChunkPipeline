@@ -187,7 +187,7 @@ def _longest_path(skel):
     return longest_path
 
 
-def task_skeletonize(cfg, extracted):
+def task_skeletonize(cfg, extracted, fuse_radius=None):
     vol = extracted["raw"]
     row = extracted["row"]
     general = cfg["GENERAL"]
@@ -202,7 +202,7 @@ def task_skeletonize(cfg, extracted):
         downsampled, offsets, kimi["PARAMS"], real_anisotropy, general["ANISOTROPY"]
     )
     # ensure everything is merged
-    skels = chunk_connect_skels(skels, fuse_radius=None)
+    skels = chunk_connect_skels(skels, fuse_radius=fuse_radius)
 
     skel = _aggregate_skels(
         skels,

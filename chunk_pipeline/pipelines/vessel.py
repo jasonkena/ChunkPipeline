@@ -1,5 +1,5 @@
 from chunk_pipeline.pipelines import Pipeline
-from chunk_pipeline.tasks import task_load_h5, task_clean_sam
+from chunk_pipeline.tasks import task_load_h5, task_clean_sam, task_vessel_cc
 
 
 class VesselPipeline(Pipeline):
@@ -20,3 +20,17 @@ class VesselPipeline(Pipeline):
             ["cleaned_sam/seg", "cleaned_sam/voxel_counts"],
             ["seg", "voxel_counts"],
         )
+
+
+class VesselCCPipeline(Pipeline):
+    def run(self):
+        h5 = self.add(task_load_h5, "h5", cfg_groups=["GENERAL", "H5"])
+        self.compute()
+
+        cc = self.add(
+            task_vessel_cc,
+            "cc",
+            cfg_groups=["GENERAL", "VESSEL"],
+            depends_on=[h5],
+        )
+        self.compute()

@@ -69,6 +69,7 @@ KIMI__PARAMS = {
         "max_paths": None,
     },
     "dust_threshold": 1000,
+    "parallel": 0,  # use all cpu
 }
 # fuse: merge until only one connected component remaining
 # list because config does not allow None values
