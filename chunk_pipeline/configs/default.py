@@ -69,7 +69,7 @@ KIMI__PARAMS = {
         "max_paths": None,
     },
     "dust_threshold": 1000,
-    "parallel": 0,  # use all cpu
+    # "parallel": 0,  # use all cpu # raises ValueError('signal only works in main thread of the main interpreter')
 }
 # fuse: merge until only one connected component remaining
 # list because config does not allow None values
@@ -106,8 +106,8 @@ VESSEL__CONNECTIVITY = BASELINE__CONNECTIVITY
 # SLURM cluster config
 SLURM__PROJECT_NAME = "{TASK}"
 # SLURM__PARTITIONS = "full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
-# SLURM__PARTITIONS = "weidf,gpua100,gpuv100,exclusive"  # for some reason, if shared is included, it overrides everything else
-SLURM__PARTITIONS = "shared"
+SLURM__PARTITIONS = "weidf,gpua100,gpuv100,exclusive"  # for some reason, if shared is included, it overrides everything else
+# SLURM__PARTITIONS = "shared"
 # SLURM__PARTITIONS = "partial_nodes,full_nodes48,full_nodes64,gpuv100,gpua100,weidf"
 SLURM__CORES_PER_JOB = 48
 
@@ -160,6 +160,7 @@ L1__BIN_PATH = f"junest {l1_path}/PointCloud/PointCloudL1"
 L1__JSON_PATH = "/data/adhinart/dendrite/chunk_pipeline/configs/dendrite_skeleton_config.json"  # changed downsample num to 3000
 
 # junest can't read /scratch
+# NOTE: remember to clear this
 L1__TMP_DIR = f"{l1_path}/tmp"
 L1__STORE_TMP = True
 # noise in isotropic nm space (pre downscaling)

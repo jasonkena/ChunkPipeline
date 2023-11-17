@@ -27,6 +27,7 @@ import chunk_pipeline.tasks.sphere as sphere
 
 # from stardist.data import test_image_nuclei_3d
 from scipy.ndimage import rotate
+
 # from stardist.matching import matching as stardist_matching
 
 from dask_jobqueue import SLURMCluster
@@ -99,7 +100,7 @@ class ChunkTest(unittest.TestCase):
         shape = (100, 100, 100)
         chunk_size = (9, 8, 7)
 
-        input = np.random.randint(0, 2 ** 16 - 1, shape)
+        input = np.random.randint(0, 2**16 - 1, shape)
         gt = compute_bbox_all_3d(input)
 
         output = chunk.chunk_bbox(da.from_array(input, chunks=chunk_size)).compute()
@@ -114,13 +115,13 @@ class ChunkTest(unittest.TestCase):
         # input = np.random.rand(*shape) > 0.8
         input = np.zeros(shape, dtype=bool)
         # input[0,0,0]=True
-        input[1,1,1]=True
+        input[1, 1, 1] = True
 
         output = chunk.chunk_cc3d(
             da.from_array(input, chunks=chunk_size),
             connectivity,
             k,
-            uint_dtype=np.uint8
+            uint_dtype=np.uint8,
         )
         output = dask.compute(*output)
 
@@ -132,15 +133,11 @@ class ChunkTest(unittest.TestCase):
         # cannot evaluate whether cc3d is equal because ordering cannot be guaranteed
         self.assertTrue(np.array_equal(output[1], statistics))
         # check whether k filtering causes incorrect results
-        
+
         new_voxel_counts = cc3d.statistics(output[0].astype(np.uint))["voxel_counts"]
         print(output[1])
         print(new_voxel_counts)
-        self.assertTrue(
-            np.array_equal(
-                output[1], new_voxel_counts
-            )
-        )
+        self.assertTrue(np.array_equal(output[1], new_voxel_counts))
 
     def test_dt_sanity(self):
         anisotropy = (1, 2, 3)

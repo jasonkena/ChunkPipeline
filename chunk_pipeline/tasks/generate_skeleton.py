@@ -70,7 +70,7 @@ def _fast_join_close_components_kernel(s1, s2):
 
 
 # adapted from https://github.com/seung-lab/kimimaro/blob/74780a40008a56af3b55ecd8c4f3e4dcbdec6e85/kimimaro/postprocess.py#L79
-def fast_join_close_components(skeletons, radius=None):
+def fast_join_close_components(skeletons, anisotropy, radius=None):
     """
     Given a set of skeletons which may contain multiple connected components,
     attempt to connect each component to the nearest other component via the
@@ -90,6 +90,8 @@ def fast_join_close_components(skeletons, radius=None):
         skels += skeleton.components()
 
     skels = [skl.consolidate() for skl in skels if not skl.empty()]
+    for skl in skels:
+        skl.vertices *= np.array(anisotropy)
 
     if len(skels) == 1:
         return skels[0]
@@ -137,10 +139,13 @@ def fast_join_close_components(skeletons, radius=None):
         skels[j] = None
         skels = [_ for _ in skels if _ is not None] + [fused]
 
+    for skl in skels:
+        skl.vertices /= np.array(anisotropy)
+
     return Skeleton.simple_merge(skels).consolidate()
 
 
-def _chunk_connect_skels(all_skels, fuse_radius, pre_merge=False):
+def _chunk_connect_skels(all_skels, fuse_radius, anisotropy, pre_merge=False):
     all_skels = all_skels.flatten().tolist()
     skels = []
     for i in all_skels:
@@ -152,25 +157,32 @@ def _chunk_connect_skels(all_skels, fuse_radius, pre_merge=False):
     if pre_merge:
         skels = Skeleton.simple_merge(skels).consolidate()
 
-    return [fast_join_close_components(skels, radius=fuse_radius)]
+    return [
+        fast_join_close_components(skels, radius=fuse_radius, anisotropy=anisotropy)
+    ]
 
 
-def chunk_connect_skels(skels, fuse_radius):
+def chunk_connect_skels(skels, fuse_radius, anisotropy):
     return chunk.chunk(
         _chunk_connect_skels,
         [skels],
         output_dataset_dtypes=[object],
         pad="half_extend",
         fuse_radius=fuse_radius,
+        anisotropy=anisotropy,
     )
 
 
 @dask.delayed
-def _aggregate_skels(all_skels, dust_threshold, tick_threshold, fuse_radius, row):
-    skel = _chunk_connect_skels(all_skels, fuse_radius, pre_merge=True)[0]
+def _aggregate_skels(
+    all_skels, dust_threshold, tick_threshold, fuse_radius, row, anisotropy
+):
+    skel = _chunk_connect_skels(all_skels, fuse_radius, anisotropy, pre_merge=True)[0]
+    skel.vertices *= np.array(anisotropy)
     skel = kimimaro.postprocess(
         skel, dust_threshold=dust_threshold, tick_threshold=tick_threshold
     )
+    skel.vertices /= np.array(anisotropy)
     skel.vertices += np.array([row[1], row[3], row[5]]).reshape(1, 3)
 
     return skel
@@ -194,15 +206,18 @@ def task_skeletonize(cfg, extracted, fuse_radius=None):
     kimi = cfg["KIMI"]
     post = kimi["POSTPROCESS_PARAMS"]
 
+    # real_anisotropy is the anisotropy of each downsampled voxel
     downsampled, offsets, real_anisotropy = chunk_downsample(
         vol, general["ANISOTROPY"], kimi["DOWNSAMPLE_RADIUS"]
     )
-
+    # skeletons are given in anisotropic coordinates (ijk indexing)
     skels = chunk_kimimaro(
         downsampled, offsets, kimi["PARAMS"], real_anisotropy, general["ANISOTROPY"]
     )
     # ensure everything is merged
-    skels = chunk_connect_skels(skels, fuse_radius=fuse_radius)
+    skels = chunk_connect_skels(
+        skels, fuse_radius=fuse_radius, anisotropy=general["ANISOTROPY"]
+    )
 
     skel = _aggregate_skels(
         skels,
@@ -210,6 +225,7 @@ def task_skeletonize(cfg, extracted, fuse_radius=None):
         post["tick_threshold"],
         post["fuse_radius"],
         row,
+        general["ANISOTROPY"],
     )
     longest_path = _longest_path(skel)
     return {"skeleton": skel, "longest_path": longest_path}

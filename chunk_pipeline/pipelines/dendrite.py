@@ -42,21 +42,22 @@ class DendritePipeline(Pipeline):
         self.compute()
 
         # NOTE: kimimaro skeletons are broken
-        # skeletons = []
-        # for i in range(n):
-        #     skeletons.append(
-        #         self.add(
-        #             task_skeletonize,
-        #             f"skeleton_{i}",
-        #             cfg_groups=["GENERAL", "KIMI"],
-        #             depends_on=[extracted[i]],
-        #         )
-        #     )
-        # self.compute()
+        skeletons = []
+        for i in range(n):
+            skeletons.append(
+                self.add(
+                    task_skeletonize,
+                    f"skeleton_{i}",
+                    cfg_groups=["GENERAL", "KIMI"],
+                    depends_on=[extracted[i]],
+                )
+            )
+        self.compute()
+        print("done computing kimimaro skeletons")
 
         point_clouds = []
-        # for i in range(n):
-        for i in range(34, 47):
+        for i in range(n):
+            # for i in range(34, 47):
             point_clouds.append(
                 self.add(
                     task_generate_point_cloud,
@@ -70,7 +71,6 @@ class DendritePipeline(Pipeline):
                 self.compute()
         self.compute()
         print("done computing point clouds")
-        __import__("pdb").set_trace()
         #
         l1 = []
         for i in range(n):
@@ -82,10 +82,12 @@ class DendritePipeline(Pipeline):
                     depends_on=[point_clouds[i]],
                 )
             )
-            # if i % 10 == 0:
-            #     print("Computing l1", i)
-            #     self.compute()
+            if i % 10 == 0:
+                print("Computing l1", i)
+                self.compute()
         self.compute()
+        print("done computing l1")
+        __import__("pdb").set_trace()
 
         point_cloud_segments = []
         for i in range(n):
