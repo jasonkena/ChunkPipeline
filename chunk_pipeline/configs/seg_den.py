@@ -8,3 +8,5 @@ H5 = {
     "spine": (f"{base}{TASK}_spine.h5", "main"),
     "seg": (f"{base}{TASK}_seg.h5", "main"),
 }  # "seg": (f"{base}{TASK}_seg.h5", "main")}
+L1__NUM_SAMPLE = 50000  # GUI example has 40000 points
+L1__NOISE_STD = 30.0  # determine this by eyeballing downsampled pointcloud

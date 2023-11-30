@@ -252,7 +252,10 @@ def generate_l1(
     pc *= downscale_factor
 
     error_count = 0
-    while True:
+    best_skel = None
+    best_skel_n_components = float("inf")
+
+    while error_count <= max_errors:
         with tempfile.NamedTemporaryFile(
             suffix=".ply", dir=tmp_dir, delete=(not store_tmp)
         ) as tmp_ply, tempfile.NamedTemporaryFile(
@@ -274,30 +277,38 @@ def generate_l1(
                     f"L1 skeletonization failed {ply_path} {skel_path} {json_path}"
                 )
 
+            skel = None
             try:
                 skel = parse_skel(skel_path)
-                break
             except Exception:
-                if error_count > max_errors:
-                    logging.warning(
-                        f"L1 parsing failed {ply_path} {skel_path} {json_path}, saving blank"
-                    )
-                    return Skeleton()
-                else:
-                    logging.warning(
-                        f"L1 parsing failed {ply_path} {skel_path} {json_path} attempt {error_count}, retrying"
-                    )
+                logging.warning(
+                    f"L1 parsing failed {ply_path} {skel_path} {json_path} attempt {error_count}, retrying"
+                )
+            if skel is not None:
+                skel = to_cloud_volume_skeleton(skel)
+                skel.vertices /= downscale_factor * anisotropy
+                n_components = len(skel.components())
+                assert n_components > 0
 
-                    error_count += 1
-                    pc = pc * error_upsample
-                    downscale_factor *= error_upsample
+                if n_components < best_skel_n_components:
+                    best_skel = skel
+                    best_skel_n_components = n_components
+                if n_components == 1:
+                    break
 
-    skeleton = to_cloud_volume_skeleton(skel)
-    skeleton.vertices /= downscale_factor * anisotropy
+            error_count += 1
+            pc = pc * error_upsample
+            downscale_factor *= error_upsample
 
-    skeleton = kimimaro.join_close_components(skeleton, radius=None)
+    if best_skel is None:
+        logging.warning(
+            f"L1 parsing failed {ply_path} {skel_path} {json_path}, saving blank"
+        )
+        return Skeleton()
 
-    return skeleton
+    best_skel = kimimaro.join_close_components(best_skel, radius=None)
+
+    return best_skel
 
 
 def task_generate_l1_from_vol(cfg, vols):
@@ -319,6 +330,8 @@ def task_generate_l1_from_vol(cfg, vols):
                 # l1["DOWNSCALE_FACTOR"],
                 l1["NOISE_STD"],
                 l1["NUM_SAMPLE"],
+                max_errors=l1["MAX_ERRORS"],
+                error_upsample=l1["ERROR_UPSAMPLE"],
             )
     return results
 
@@ -342,6 +355,8 @@ def task_generate_snemi_l1_from_vol(cfg, vols):
             # l1["DOWNSCALE_FACTOR"],
             l1["NOISE_STD"],
             l1["NUM_SAMPLE"],
+            max_errors=l1["MAX_ERRORS"],
+            error_upsample=l1["ERROR_UPSAMPLE"],
             anisotropy=anisotropy,
         )
     return results
@@ -365,6 +380,8 @@ def task_generate_l1_from_pc(cfg, pc):
         # l1["DOWNSCALE_FACTOR"],
         l1["NOISE_STD"],
         l1["NUM_SAMPLE"],
+        max_errors=l1["MAX_ERRORS"],
+        error_upsample=l1["ERROR_UPSAMPLE"],
         anisotropy=anisotropy,
     )
     longest_path = _longest_path(skel)
@@ -401,6 +418,8 @@ def task_generate_l1_from_npz(cfg):
             # l1["DOWNSCALE_FACTOR"],
             l1["NOISE_STD"],
             l1["NUM_SAMPLE"],
+            max_errors=l1["MAX_ERRORS"],
+            error_upsample=l1["ERROR_UPSAMPLE"],
         )
         longest_path = _longest_path(skel)
         results[key] = {"skeleton": skel, "longest_path": longest_path}

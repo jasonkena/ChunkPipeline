@@ -169,6 +169,8 @@ L1__NOISE_STD = 0.0  # determine this by eyeballing downsampled pointcloud
 # L1__DOWNSCALE_FACTOR = 0.001
 # set to 0 to use all points
 L1__NUM_SAMPLE = 100000  # GUI example has 40000 points
+L1__MAX_ERRORS = 5
+L1__ERROR_UPSAMPLE = 1.5
 
 VESICLE__GLOB = ["/mmfs1/data/adhinart/vesicle/new_xiaomeng/*/*.tif"]  # ["*/*"]
 # VESICLE__GLOB = ["/mmfs1/data/adhinart/vesicle/new_im_vesicle/*.tif"]
