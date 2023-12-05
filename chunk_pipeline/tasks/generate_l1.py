@@ -298,7 +298,10 @@ def generate_l1(
                 skel = to_cloud_volume_skeleton(skel)
                 # now in isotropic real (nm) units
                 skel.vertices /= downscale_factor
+                # calculate path length (with potentially multiple connected components)
                 path_length = skel_path_length(skel)
+                # merge connected components while still in isotropic coordinates
+                skel = kimimaro.join_close_components(skel, radius=None)
                 # now in idx units
                 skel.vertices /= anisotropy
 
@@ -324,9 +327,6 @@ def generate_l1(
             f"L1 parsing failed {ply_path} {skel_path} {json_path}, saving blank"
         )
         return Skeleton()
-
-    # NOTE: NOTE: NOTE: bug, close_components is computed using anisotropic coordinates
-    best_skel = kimimaro.join_close_components(best_skel, radius=None)
 
     return best_skel
 
