@@ -82,11 +82,12 @@ class DendritePipeline(Pipeline):
                     depends_on=[point_clouds[i]],
                 )
             )
-            if i % 10 == 0:
+            if i % 10 == 0 and i != 0:
                 print("Computing l1", i)
                 self.compute()
         self.compute()
         print("done computing l1")
+        return
         __import__("pdb").set_trace()
 
         point_cloud_segments = []

@@ -212,6 +212,14 @@ def generate_l1_from_pc(pc, *args, **kwargs):
     return skel
 
 
+def skel_path_length(skel):
+    # assuming isotropic skeleton
+    # return l2 distance between all edges
+    v = skel.vertices
+    e = skel.edges
+    return np.sum(np.linalg.norm(v[e[:, 0]] - v[e[:, 1]], axis=1))
+
+
 def generate_l1(
     pc,
     bin_path,
@@ -253,8 +261,10 @@ def generate_l1(
 
     error_count = 0
     best_skel = None
-    best_skel_n_components = float("inf")
+    best_skel_length = -1
+    # best_skel_n_components = float("inf")
 
+    # NOTE: TODO: delegate each try to dask
     while error_count <= max_errors:
         with tempfile.NamedTemporaryFile(
             suffix=".ply", dir=tmp_dir, delete=(not store_tmp)
@@ -286,15 +296,24 @@ def generate_l1(
                 )
             if skel is not None:
                 skel = to_cloud_volume_skeleton(skel)
-                skel.vertices /= downscale_factor * anisotropy
-                n_components = len(skel.components())
-                assert n_components > 0
+                # now in isotropic real (nm) units
+                skel.vertices /= downscale_factor
+                path_length = skel_path_length(skel)
+                # now in idx units
+                skel.vertices /= anisotropy
 
-                if n_components < best_skel_n_components:
+                assert path_length > 0
+                if path_length > best_skel_length:
                     best_skel = skel
-                    best_skel_n_components = n_components
-                if n_components == 1:
-                    break
+                    best_skel_length = path_length
+                # n_components = len(skel.components())
+                # assert n_components > 0
+                #
+                # if n_components < best_skel_n_components:
+                #     best_skel = skel
+                #     best_skel_n_components = n_components
+                # if n_components == 1:
+                #     break
 
             error_count += 1
             pc = pc * error_upsample
@@ -306,6 +325,7 @@ def generate_l1(
         )
         return Skeleton()
 
+    # NOTE: NOTE: NOTE: bug, close_components is computed using anisotropic coordinates
     best_skel = kimimaro.join_close_components(best_skel, radius=None)
 
     return best_skel
