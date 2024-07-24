@@ -87,8 +87,6 @@ class DendritePipeline(Pipeline):
                 self.compute()
         self.compute()
         print("done computing l1")
-        return
-        __import__("pdb").set_trace()
 
         point_cloud_segments = []
         for i in range(n):
@@ -101,71 +99,47 @@ class DendritePipeline(Pipeline):
                     # depends_on=[point_clouds[i], skeletons[i]],
                 )
             )
-            if i % 10 == 0:
-                # if i % 10 == 0:
+            if i % 10 == 0 and i != 0:
                 print("Computing point cloud segments", i)
                 # this already uses ~ 500 GB of RAM
                 self.compute()
         self.compute()
         print("done computing pre-export")
+        # return
 
-        # export skeletons
-        skels = []
-        longest_paths = []
+        base_path = self.cfg["MISC"]["ZARR_PATH"]
+        task = self.cfg["TASK"]
 
-        # export point clouds
-        idxs = []
-        spines = []
-        seg = []
-        #
-        # segments = []
-        # segments_skel = []
-        # segments_skel_gnb = []
-        #
+        
         import numpy as np
+        import glob
         import os
+        from tqdm import tqdm
 
-        # task_name = "seg_den"
-        # base_path = f"/mmfs1/data/adhinart/dendrite/data/{task_name}/pc_export"
-        # if not os.path.exists(base_path):
-        #     os.makedirs(base_path)
-        # for i in range(n):
-        #     group = zarr.open_group(f"/mmfs1/data/adhinart/dendrite/data/{task_name}/point_cloud_segments_{i}")
-        #     centerline = self.load(f"point_cloud_segments_{i}/centerline")
-        #     np.savez(os.path.join(base_path,f"{task_name}_{i}_centerline.npz"), centerline)
-        #     for j in range(6):
-        #         pc = group[str(j)][:]
-        #         np.savez(os.path.join(base_path,f"{task_name}_{i}_{j}.npz"), pc)
-        # print("saving done")
-        #
+        save_path = os.path.join(base_path, f"pc_export_{task}")
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
 
-        for i in range(n):
-            # skels.append(self.load(f"skeleton_{i}/skeleton"))
-            # longest_paths.append(self.load(f"skeleton_{i}/longest_path"))
-            idxs.append(f"point_cloud_{i}/idx")
-            spines.append(f"point_cloud_{i}/spine")
-            seg.append(f"point_cloud_{i}/seg")
-            # segments_skel.append(self.load(f"point_cloud_segments_{i}/skel"))
-            # segments_skel_gnb.append(self.load(f"point_cloud_segments_{i}/skel_gnb_0"))
-            # # segments_skel_gnb.append(self.load(f"point_cloud_segments_{i}/skel_gnb"))
-            # for j in range(6):
-            #     segments.append(f"point_cloud_segments_{i}/pc_{j}")
-            #     segments.append(f"point_cloud_segments_{i}/pc_gnb_{j}")
-            #     segments.append(f"point_cloud_segments_{i}/closest_idx_{j}")
-            #     segments.append(f"point_cloud_segments_{i}/dist_{j}")
+        for i in tqdm(range(n)):
+            pc_group = zarr.open_group(f"{base_path}/point_cloud_{i}")
+            pc_seg_group = zarr.open_group(f"{base_path}/point_cloud_segments_{i}")
+            idx = pc_group["idx"][:]
+            spine = pc_group["spine"][:]
+            seg = pc_group["seg"][:]
+            centerline = pc_seg_group["_attrs"][0]["reference"]
 
-        from chunk_pipeline.utils import object_array
+            np.savez(os.path.join(save_path, f"pc_{i}.npz"), idx=idx, spine=spine, seg=seg, centerline=centerline)
+            keys = list(pc_seg_group.keys())
+            ids = [key.split("_")[-1] for key in keys]
+            ids = [int(x) for x in ids if x.isdigit()]
+            ids = sorted(set(ids))
 
-        # skels = object_array(skels)
-        # longest_paths = object_array(longest_paths)
-        #
-        # self.export(
-        #     "pc_segments_skel.zip",
-        #     [segments_skel, segments_skel_gnb],
-        #     ["skel", "skel_gnb"],
-        # )
-        self.export("pc.zip", idxs + spines + seg, idxs + spines + seg)
-        print("done pc")
-        self.export("pc_segments.zip", segments, segments)
-        self.export("skel.zip", [skels, longest_paths], ["skel", "longest_path"])
-        # self.export("pc_segments.zip", segments, segments)
+            # for each slice
+            for j in tqdm(ids,leave=False):
+                pc = pc_seg_group[f"pc_{j}"][:]
+                closest_idx = pc_seg_group[f"closest_idx_{j}"][:]
+                np.savez(os.path.join(save_path, f"pc_seg_{i}_{j}.npz"), pc=pc, closest_idx=closest_idx)
+
+        print("saving done")
+
+        # see git history for how to use self.export

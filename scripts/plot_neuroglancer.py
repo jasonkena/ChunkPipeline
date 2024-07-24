@@ -1,10 +1,12 @@
 import argparse
 import numpy as np
+import fastremap
 
 import neuroglancer
 import h5py
 import imageio
 import zarr
+import cc3d
 
 ip = "localhost"  # or public IP of the machine for sharable display
 port = 8901
@@ -80,8 +82,9 @@ def get_vol(dataset, id, downsample=[1, 4, 4]):
 
 #im = h5py.File("/mmfs1/data/adhinart/dendrite/raw/human_raw.h5").get("main")[:]
 
-# # im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
-# # seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
+# im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
+# seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
+
 # im = h5py.File("/data/bccv/dataset/foundation/low_res/human_h01_256-264nm.h5").get("main")[:,5000:5000+512,5000:5000+512]
 # seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_human/foundation.zip")["seg"][:,5000:5000+512,5000:5000+512]
 # # im = h5py.File("/data/bccv/dataset/foundation/low_res/macaque_mpi_176-240nm.h5").get("main")[:]
@@ -94,14 +97,51 @@ def get_vol(dataset, id, downsample=[1, 4, 4]):
 # id = "200_1600_1080"
 # im = h5py.File(f"/scratch/wanjr/mouse/mouse_errors/{id}_img.h5").get("main")[:]
 # orig = h5py.File(f"/scratch/wanjr/mouse/mouse_errors/{id}_pred.h5").get("main")[:]
-seg = zarr.open_group("/data/adhinart/dendrite/data/vessel/cleaned_sam.zip")["seg"][:]
-seg = seg[370*4:410*4, 250*4:390*4, 375*4:530*4]
-# seg = seg[260*4:320*4,910*4:1010*4,380*4:460*4]
-# seg = seg[:500, :500, :500]
-# seg = seg[::4,::4,::4]
-orig = h5py.File("/scratch/wanjr/mouse/mouse_final_seg_mobile_all_clean.h5").get("main")[:]
-orig = orig[370*4:410*4, 250*4:390*4, 375*4:530*4]
-orig = orig.astype(np.uint8) # need this for the h5
+# seg = zarr.open_group("/data/adhinart/dendrite/data/vessel/cleaned_sam.zip")["seg"][:]
+# seg = seg[370*4:410*4, 250*4:390*4, 375*4:530*4]
+# # seg = seg[260*4:320*4,910*4:1010*4,380*4:460*4]
+# # seg = seg[:500, :500, :500]
+# # seg = seg[::4,::4,::4]
+# orig = h5py.File("/scratch/wanjr/mouse/mouse_final_seg_mobile_all_clean.h5").get("main")[:]
+# orig = orig[370*4:410*4, 250*4:390*4, 375*4:530*4]
+# orig = orig.astype(np.uint8) # need this for the h5
+#
+
+# id = ["SHL18_soma_image", "SHL18_junction_image", "SHL18_end_image"][0]
+# im = h5py.File(f"/mmfs1/data/bccv/dataset/hydra/mito/train_3vol/{id}.h5").get("main")[:]
+# seg = h5py.File(f"/data/adhinart/vesicle/3vol/{id}_seg.h5").get("main")[:]
+
+# im = h5py.File("/data/adhinart/trisam/unet/data/human_train.h5").get("raw")[:]
+# seg = h5py.File("/data/adhinart/trisam/unet/data/human_train.h5").get("label")[:]
+
+# im = h5py.File("/data/projects/weilab/dataset/foundation/low_res/bvem/macaque_mpi_176-240nm.h5").get("main")[:]
+# # gt = h5py.File("/data/projects/weilab/dataset/foundation/low_res/bvem/macaque_mpi_176-240nm_bv_gt_cc.h5").get("main")[:]
+# # seg = h5py.File("/data/adhinart/trisam/unet/output/macaque/macaque_mpi_176-240nm_predictions.h5")["predictions"][:]
+# # seg = (seg[0] > 0.5).astype(np.uint8)
+# # seg[0:30] = 0
+# # seg[-30:] = 0
+# # seg[:, 0:30] = 0
+# # seg[:, -30:] = 0
+# # seg[:, :, 0:30] = 0
+# # seg[:, :, -30:] = 0
+# # seg = cc3d.largest_k(seg, k=126)
+# # print("welp")
+# # # seg = cc3d.connected_components(seg, connectivity=6)
+# #
+# # print(np.unique(seg))
+# # print(np.unique(gt))
+#
+# seg = zarr.open_group("/data/adhinart/dendrite/data/foundation_macaque/foundation.zip")["seg"][:]
+# seg = cc3d.largest_k(seg, k=126)
+# remap = {i: i for i in range(128)}
+# remap[1] = 126
+# remap[126] = 1
+# seg = fastremap.remap(seg, remap)
+# print(np.unique(seg))
+
+id = ["vol0", "vol1", "vol2"][0]
+im = h5py.File(f"/data/adhinart/hydra/{id}_sample.h5").get("image")[:]
+seg = h5py.File(f"/data/adhinart/hydra/{id}_sample.h5").get("label")[:]
 
 #
 # raw = h5py.File("/mmfs1/data/adhinart/dendrite/raw/seg_den_raw.h5").get("main")[:,:4000,:4000]
@@ -179,9 +219,9 @@ res = neuroglancer.CoordinateSpace(
 
 with viewer.txn() as s:
     #s.layers.append(name="im", layer=ngLayer(im, res, tt="image"))
-    # s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
+    s.layers.append(name='im',layer=ngLayer(im,res,tt='image'))
     s.layers.append(name="seg", layer=ngLayer(seg, res, tt="segmentation"))
-    s.layers.append(name="orig", layer=ngLayer(orig, res, tt="segmentation"))
+    # s.layers.append(name="orig", layer=ngLayer(orig, res, tt="segmentation"))
     # s.layers.append(name='gt',layer=ngLayer(gt,res,tt='segmentation'))
     # s.layers.append(name="seg", layer=ngLayer(gt, res, tt="segmentation"))
     # s.layers.append(name="bin", layer=ngLayer(binary, res, tt="segmentation"))

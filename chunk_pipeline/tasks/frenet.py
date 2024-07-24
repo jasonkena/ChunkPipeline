@@ -11,7 +11,7 @@ import networkx as nx
 from chunk_pipeline.utils import object_array
 
 
-def get_trunk_path(skel):
+def nx_from_skel(skel):
     edges = []
     for a, b in skel.edges:
         l2 = np.linalg.norm(skel.vertices[a] - skel.vertices[b])
@@ -19,6 +19,11 @@ def get_trunk_path(skel):
 
     G = nx.Graph()
     G.add_weighted_edges_from(edges)
+    return G
+
+
+def get_trunk_path(skel):
+    G = nx_from_skel(skel)
     assert nx.is_connected(G)
 
     unique, counts = np.unique(skel.edges.reshape(-1), return_counts=True)
@@ -44,40 +49,95 @@ def get_trunk_path(skel):
             except:
                 pass
     paths = sorted(paths, key=lambda x: x[1])
+    path = paths[-1][0]
+    assert max(path) < len(skel.vertices)
 
-    return paths[-1][0]
+    return path
+
+
+def closest_trunk_idx(skel, trunk_path):
+    # for each point in skeleton, get idx to closest point in trunk (by path length)
+    # returns order in trunk_path, not the idx of the point in the skeleton
+    G = nx_from_skel(skel)
+    # get all paths, using trunk_path ids as sources
+    paths = nx.multi_source_dijkstra_path(G, trunk_path)
+    assert len(paths) == len(skel.vertices)
+    closest_idx = []
+    for i in range(len(skel.vertices)):
+        # start of path is source
+        closest_idx.append(paths[i][0])
+    # closest_idx in idx of trunk point wrt skel
+    closest_idx = np.array(closest_idx)
+    remap = -np.ones(len(skel.vertices), dtype=int)
+    remap[trunk_path] = np.arange(len(trunk_path))
+
+    # closest_idx in idx of trunk point wrt trunk_path
+    closest_idx = remap[closest_idx]
+    assert np.all(closest_idx != -1)
+
+    return closest_idx
+
+
+def closest_centerline(skel, centerline, trunk_path):
+    # NOTE: assumes isotropic skel
+    # for each point in reference: [centerline + (skel - trunk_path)], get idx to closest point in centerline (by both l2 distance and graph distance)
+    is_trunk = np.zeros(len(skel.vertices), dtype=bool)
+    is_trunk[trunk_path] = True
+    reference = np.concatenate([centerline, skel.vertices[~is_trunk]], axis=0)
+
+    assert len(trunk_path) <= skel.vertices.shape[0]
+    closest_idx_centerline_to_centerline = np.arange(centerline.shape[0])
+    # has length rest
+    closest_idx_rest_to_trunk = closest_trunk_idx(skel, trunk_path)[~is_trunk]
+    # has length trunk
+    closest_idx_trunk_to_centerline = get_closest(
+        skel.vertices[trunk_path], centerline
+    )[1]
+    closest_idx_rest_to_centerline = closest_idx_trunk_to_centerline[
+        closest_idx_rest_to_trunk
+    ]
+    closest_idx_reference_to_centerline = np.concatenate(
+        [closest_idx_centerline_to_centerline, closest_idx_rest_to_centerline], axis=0
+    )
+
+    return reference, closest_idx_reference_to_centerline
 
 
 @dask.delayed
-def get_centerline(skel, path_length, anisotropy):
-    dtype = np.float64
-
-    anisotropy = np.array(anisotropy).astype(dtype)
-    skel.vertices = skel.vertices.astype(dtype) * anisotropy
+def get_centerline(skel, path_length):
+    # NOTE: assumes that skeleton is already "beautified" and isotropic
+    # returns interpolated centerline, with trunk_path with idx of non-interpolated skel.vertices
     trunk_path = get_trunk_path(skel)
 
     centerline = spline_interpolate_centerline(skel.vertices[trunk_path], path_length)
+    assert max(trunk_path) < len(skel.vertices)
 
-    return centerline
+    return centerline, trunk_path
 
 
 @dask.delayed
-def segment_pc(idx, spine, seg, centerline, path_length, anisotropy):
+def segment_pc(idx, spine, seg, centerline, path_length, trunk_path, anisotropy, skel):
+    # centerline is interpolated
     dtype = np.float64
     anisotropy = np.array(anisotropy).astype(dtype)
     # idx: [n, 3]
     # spine: [n]
 
     # get isotropic pc
-    # [n, 4]
+    # [n, 5] (idx, spine [bool], seg)
     pc = np.concatenate(
         [idx.astype(dtype) * anisotropy, spine[:, None], seg[:, None]], axis=1
     )
 
-    dist, closest_idx = get_closest(pc[:, :3], centerline)
+    # NOTE: this assumes isotropic skel and centerline
+    skel.vertices = skel.vertices * anisotropy
+    reference, closest_idx_reference_to_centerline = closest_centerline(
+        skel, centerline, trunk_path
+    )
 
-    cord_skel, T, N, B, dis_geo_skel = get_cord_skel(centerline)
-    assert cord_skel.shape == centerline.shape
+    dist, closest_idx = get_closest(pc[:, :3], reference)
+    # maps to closest centerline
+    closest_idx = closest_idx_reference_to_centerline[closest_idx]
 
     assert centerline.shape[0] == path_length
     assert np.max(closest_idx) < path_length
@@ -105,12 +165,9 @@ def segment_pc(idx, spine, seg, centerline, path_length, anisotropy):
 
     # assert min([len(x) for x in pc_segments]) > 0
 
+    # returns isotropic reference
     result = {
-        "skel_gnb": cord_skel,
-        "T": T,
-        "N": N,
-        "B": B,
-        "dis_geo_skel": dis_geo_skel,
+        "reference": reference,
         "split": [],
     }
 
@@ -341,18 +398,18 @@ def normal_backwards(skeleton, idx_1):
 
 @dask.delayed
 def merge_combined(array):
-    pc = [x["pc"] for x in array[:, 0]]
-    pc = np.concatenate(pc, axis=0)
+    pc = np.concatenate([x["pc"] for x in array], axis=0)
+    dist = np.concatenate([x["dist"] for x in array], axis=0)
+    closest_idx = np.concatenate([x["closest_idx"] for x in array], axis=0)
 
     if len(pc) == 0:
         # return negative one if segment is empty
-        pc = -np.ones((1, 4))
-        return {"pc": pc, "pc_gnb": pc}
+        pc = -np.ones((1, 5))
+        dist = -np.ones((1,))
+        closest_idx = -np.ones((1,))
+        return {"pc": pc, "dist": dist, "closest_idx": closest_idx}
 
-    pc_gnb = array[:, 1].tolist()
-    pc_gnb = np.concatenate(pc_gnb, axis=0)
-
-    return {"pc": pc, "pc_gnb": pc_gnb}
+    return {"pc": pc, "dist": dist, "closest_idx": closest_idx}
 
 
 def stride_segments(combined, centerline, window_length, stride_length):
@@ -388,13 +445,67 @@ def stride_segments(combined, centerline, window_length, stride_length):
     return segments, idx
 
 
-def task_generate_point_cloud_segments(cfg, pc, skel):
-    skel = skel["skeleton"]
+def beautify_skel(skel, anisotropy, sigma_threshold=3):
+    # NOTE: assumes anisotropic skeleton, returns isotropic skeleton
+    # NOTE: may modify skel in-place
+    dtype = np.float64
+    anisotropy = np.array(anisotropy).astype(dtype)
+    skel.vertices = skel.vertices.astype(dtype) * anisotropy
+
+    # replaces edges larger than sigma_threshold * median edge with a straight line with path_length = median edge (approximately)
+    path_lengths = np.linalg.norm(
+        skel.vertices[skel.edges[:, 0]] - skel.vertices[skel.edges[:, 1]], axis=1
+    )
+    median = np.median(path_lengths)
+    thresh = median * sigma_threshold
+    edge_ids = np.where(path_lengths > thresh)[0]
+
+    if len(edge_ids) == 0:
+        return skel
+
+    for edge_id in edge_ids:
+        # don't delete edges, modify them in-place and concatenate new edges
+        edge = skel.edges[edge_id]
+        pt1, pt2 = skel.vertices[edge[0]], skel.vertices[edge[1]]
+        # includes endpoints
+        num_pts = int(np.ceil(path_lengths[edge_id] / median)) + 1
+        assert num_pts >= 3  # probably means sigma_threshold should be larger
+        # don't include endpoints
+        new_pts = np.linspace(pt1, pt2, num_pts)[1:-1]
+        new_radii = np.linspace(skel.radius[edge[0]], skel.radius[edge[1]], num_pts)[
+            1:-1
+        ]
+        N = len(skel.vertices)
+        skel.vertices = np.concatenate([skel.vertices, new_pts])
+        skel.radius = np.concatenate([skel.radius, new_radii])
+        skel.vertex_types = np.concatenate([skel.vertex_types, np.zeros(len(new_pts))])
+        new_edges = []
+        for i in range(N, N + len(new_pts) - 1):
+            new_edges.append([i, i + 1])
+        new_edges.append([N + len(new_pts) - 1, edge[1]])
+        skel.edges[edge_id][1] = N
+        new_edges = np.array(new_edges).astype(skel.edges.dtype)
+        skel.edges = np.concatenate([skel.edges, new_edges])
+
+    assert len(skel.components()) == 1
+
+    # NOTE: isotropic skel
+    return skel
+
+# NOTE: here here here
+def get_skel_is_trunk():
+    pass
+
+
+def task_generate_point_cloud_segments(cfg, pc, _skel):
+    _skel = _skel["skeleton"]
     idx, spine, seg = pc["idx"], pc["spine"], pc["seg"]
 
     general = cfg["GENERAL"]
     # uint_dtype = general["UINT_DTYPE"]
     anisotropy = general["ANISOTROPY"]
+    isotropic_skel = beautify_skel(_skel, anisotropy)
+
     chunk_size = general["CHUNK_SIZE"]
     chunk_size = np.prod(chunk_size)
 
@@ -404,38 +515,31 @@ def task_generate_point_cloud_segments(cfg, pc, skel):
     stride_length = frenet["STRIDE_LENGTH"]
     # segment_per = frenet["SEGMENT_PER"]
 
-    centerline = get_centerline(skel, path_length, anisotropy)
+    centerline_results = get_centerline(isotropic_skel, path_length)
+    centerline, trunk_path = centerline_results[0], centerline_results[1]
 
     # ceil
     # num_segments = np.ceil(path_length / segment_per).astype(int)
-    output = segment_pc(idx, spine, seg, centerline, path_length, anisotropy)
+    output = segment_pc(
+        idx, spine, seg, centerline, path_length, trunk_path, anisotropy, isotropic_skel
+    )
 
+    # FIX THIS
     result = {
-        "skel": centerline,
-        "skel_gnb": output["skel_gnb"],
+        "reference": output["reference"],
+        "centerline": centerline,
+        # "skel": centerline,
     }
 
     splitted = da.from_delayed(
         output["split"], shape=(path_length,), dtype=object
     ).rechunk((1,))
-    cylindrical = da.map_blocks(
-        cylindrical_segment_pc,
-        splitted,
-        centerline,
-        output["T"],
-        output["N"],
-        output["B"],
-        output["dis_geo_skel"],
-        name="cylindrical",
-        dtype=object,
-    )
-    combined = da.stack([splitted, cylindrical], axis=1).rechunk((1, -1))
 
     # need to compute to calculate chunks
     centerline = centerline.compute()
 
     segments, split_idx = stride_segments(
-        combined, centerline, window_length, stride_length
+        splitted, centerline, window_length, stride_length
     )
 
     result["split_idx"] = split_idx
@@ -443,18 +547,14 @@ def task_generate_point_cloud_segments(cfg, pc, skel):
     for i, segment in enumerate(segments):
         merged = merge_combined(segment)
         result[f"pc_{i}"] = da.from_delayed(
-            merged["pc"], shape=(np.nan, 4), dtype=np.float64
+            merged["pc"], shape=(np.nan, 5), dtype=np.float64
         )
-        result[f"pc_gnb_{i}"] = da.from_delayed(
-            merged["pc_gnb"], shape=(np.nan, 4), dtype=np.float64
+        result[f"dist_{i}"] = da.from_delayed(
+            merged["dist"], shape=(np.nan,), dtype=np.float64
         )
-
-    #     result[f"closest_idx_{i}"] = da.from_delayed(
-    #         output[f"closest_idx_{i}"], shape=(np.nan,), dtype=int
-    #     )
-    #     result[f"dist_{i}"] = da.from_delayed(
-    #         output[f"dist_{i}"], shape=(np.nan,), dtype=np.float64
-    #     )
+        result[f"closest_idx_{i}"] = da.from_delayed(
+            merged["closest_idx"], shape=(np.nan,), dtype=int
+        )
 
     # result["skel"].compute(scheduler="single-threaded")
 

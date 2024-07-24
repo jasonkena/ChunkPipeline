@@ -235,6 +235,7 @@ def generate_l1(
     anisotropy=(1, 1, 1),
 ):
     # NOTE: assumes anisotropic input, will multiply by anisotropy to get anisotropic data
+    # returns skel in idx output (anisotropic)
     # on parse errors (skeleton not fully formed), undo some of the downscaling
     if num_sample > 0:
         num_sample = int(min(pc.shape[0], num_sample, pc.shape[0] * percent_sample))
