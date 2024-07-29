@@ -1,0 +1,42 @@
+default:
+    just --list
+
+format:
+    black *.py
+
+precompute_human:
+    python to_precomputed.py -c configs/base.yaml -c configs/human.yaml
+
+precompute_mouse:
+    python to_precomputed.py -c configs/base.yaml -c configs/mouse.yaml
+
+precompute_seg_den:
+    python to_precomputed.py -c configs/base.yaml -c configs/seg_den.yaml
+
+precompute_all:
+    python to_precomputed.py -c configs/base.yaml -c configs/human.yaml
+    python to_precomputed.py -c configs/base.yaml -c configs/mouse.yaml
+    python to_precomputed.py -c configs/base.yaml -c configs/seg_den.yaml
+
+skeletonize_human:
+    python skeletonize.py -c configs/base.yaml -c configs/human.yaml
+
+skeletonize_mouse:
+    python skeletonize.py -c configs/base.yaml -c configs/mouse.yaml
+
+skeletonize_seg_den:
+    python skeletonize.py -c configs/base.yaml -c configs/seg_den.yaml
+
+skeletonize_all:
+    python skeletonize.py -c configs/base.yaml -c configs/human.yaml
+    python skeletonize.py -c configs/base.yaml -c configs/mouse.yaml
+    python skeletonize.py -c configs/base.yaml -c configs/seg_den.yaml
+
+viewer_human:
+    python viewer.py -c configs/base.yaml -c configs/human.yaml
+
+viewer_mouse:
+    python viewer.py -c configs/base.yaml -c configs/mouse.yaml
+
+viewer_seg_den:
+    python viewer.py -c configs/base.yaml -c configs/seg_den.yaml

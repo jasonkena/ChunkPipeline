@@ -1,0 +1,28 @@
+chunk_size: [512, 512, 512]
+output_dir: "outputs"
+n_jobs: 48
+
+skeletonize:
+  mip: 0
+  shape: ${chunk_size}
+  sharded: False
+  dust_threshold: 1000
+  progress: True
+  parallel: 1
+  fill_missing: False
+  teasar_params:
+    scale: 1.5
+    const: 300
+    soma_detection_threshold: 1500
+    soma_acceptance_threshold: 3500
+    soma_invalidation_scale: 2
+    soma_invalidation_const: 300
+    pdrf_scale: 100000
+    pdrf_exponent: 4
+
+merge:
+  crop: 0
+  magnitude: 3
+  dust_threshold: 1000
+  tick_threshold: 3500
+  delete_fragments: False
