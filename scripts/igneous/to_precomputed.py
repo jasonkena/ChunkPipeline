@@ -67,15 +67,28 @@ def write_modified_chunk(
     spine_data = h5py.File(spine_dataset, "r")[spine_key][slice]
     seg_data = h5py.File(seg_dataset, "r")[seg_key][slice]
 
-    assert np.all((spine_data > 0) == (seg_data > 0))
+    # seg_den_seg currently triggers this, waiting for new files
+    try:
+        assert np.all((spine_data > 0) == (seg_data > 0))
+    except AssertionError:
+        print(f"Spine and seg data mismatch at {slice}")
     # check that seg_data > 0 implies raw_data > 0
     assert np.all(np.logical_or(seg_data == 0, raw_data > 0))
 
     # give trunks id of original seg
-    output_data = raw_data * (seg_data == 0) + spine_data * (seg_data > 0)
+    output_data = raw_data * (seg_data == 0) + seg_data
+
+    seg_raw_mapping = np.stack(
+        [output_data[output_data > 0], raw_data[output_data > 0]], axis=-1
+    )
+    seg_raw_mapping = np.unique(seg_raw_mapping, axis=0)
+
+    assert len(np.unique(seg_raw_mapping[:, 0])) == seg_raw_mapping.shape[0]
 
     vol = CloudVolume(f"file://{output_layer}")
     vol[slice] = output_data
+
+    return seg_raw_mapping
 
 
 def write_chunk(
@@ -105,6 +118,15 @@ def get_chunks(shape: Tuple[int, int, int, int], chunk_size: Tuple[int, int, int
     return chunks
 
 
+def save_mapping(res, output_file):
+    mapping = np.concatenate(res, axis=0)
+    mapping = np.unique(mapping, axis=0)
+
+    assert len(np.unique(mapping[:, 0])) == mapping.shape[0]
+
+    np.save(output_file, mapping)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -121,27 +143,33 @@ if __name__ == "__main__":
     confs = [OmegaConf.load(c) for c in args.config]
     conf = OmegaConf.merge(*confs)
 
-    for x in tqdm(["raw", "spine", "seg"]):
-        vol = initialize_cloudvolume(
-            conf.data[f"{x}"],
-            conf.data[f"{x}_key"],
-            conf.data[f"{x}_layer"],
-            conf.chunk_size,
-            conf.anisotropy,
+    output_vol = initialize_cloudvolume(
+        conf.data["seg"],
+        conf.data["seg_key"],
+        conf.data["output_layer"],
+        conf.chunk_size,
+        conf.anisotropy,
+    )
+    chunks = get_chunks(tuple(output_vol.shape), tuple(output_vol.chunk_size))
+
+    res = list(
+        tqdm(
+            Parallel(n_jobs=conf.n_jobs_precompute, return_as="generator")(
+                delayed(write_modified_chunk)(
+                    c,
+                    conf.data["output_layer"],
+                    conf.data["raw"],
+                    conf.data["raw_key"],
+                    conf.data["spine"],
+                    conf.data["spine_key"],
+                    conf.data["seg"],
+                    conf.data["seg_key"],
+                )
+                for c in chunks
+            ),
+            total=len(chunks),
+            leave=False,
         )
-        chunks = get_chunks(tuple(vol.shape), tuple(vol.chunk_size))
-        list(
-            tqdm(
-                Parallel(n_jobs=conf.n_jobs, return_as="generator")(
-                    delayed(write_chunk)(
-                        c,
-                        conf.data[f"{x}"],
-                        conf.data[f"{x}_key"],
-                        conf.data[f"{x}_layer"],
-                    )
-                    for c in chunks
-                ),
-                total=len(chunks),
-                leave=False,
-            )
-        )
+    )
+
+    save_mapping(res, conf.data["mapping"])

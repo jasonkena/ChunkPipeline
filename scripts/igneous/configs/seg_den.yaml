@@ -4,10 +4,9 @@ _base_dir: "/mmfs1/data/adhinart/dendrite"
 data:
   raw: ${_base_dir}/raw/${name}_raw.h5
   raw_key: "main"
-  raw_layer: ${output_dir}/${name}/raw_layer
   spine: ${_base_dir}/raw/${name}_spine.h5
   spine_key: "main"
-  spine_layer: ${output_dir}/${name}/spine_layer
   seg: ${_base_dir}/raw/${name}_seg.h5
   seg_key: "main"
-  seg_layer: ${output_dir}/${name}/seg_layer
+  output_layer: ${output_dir}/${name}/output_layer
+  mapping : ${output_dir}/${name}/mapping.npy

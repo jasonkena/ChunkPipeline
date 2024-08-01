@@ -1,6 +1,8 @@
 chunk_size: [512, 512, 512]
 output_dir: "outputs"
-n_jobs: 48
+n_jobs_precompute: 128
+n_jobs_skeletonize: 32
+n_jobs_mesh: 32
 
 skeletonize:
   mip: 0
@@ -20,9 +22,19 @@ skeletonize:
     pdrf_scale: 100000
     pdrf_exponent: 4
 
-merge:
+skeletonize_merge:
   crop: 0
   magnitude: 3
   dust_threshold: 1000
   tick_threshold: 3500
   delete_fragments: False
+
+mesh:
+  mip: 0
+  shape: ${chunk_size}
+  sharded: False
+  progress: True
+  spatial_index: False
+
+mesh_merge:
+  magnitude: 3

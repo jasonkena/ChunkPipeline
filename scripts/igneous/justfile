@@ -32,6 +32,21 @@ skeletonize_all:
     python skeletonize.py -c configs/base.yaml -c configs/mouse.yaml
     python skeletonize.py -c configs/base.yaml -c configs/seg_den.yaml
 
+mesh_human:
+    python mesh.py -c configs/base.yaml -c configs/human.yaml
+
+mesh_mouse:
+    python mesh.py -c configs/base.yaml -c configs/mouse.yaml
+
+mesh_seg_den:
+    python mesh.py -c configs/base.yaml -c configs/seg_den.yaml
+
+mesh_all:
+    python mesh.py -c configs/base.yaml -c configs/human.yaml
+    python mesh.py -c configs/base.yaml -c configs/mouse.yaml
+    python mesh.py -c configs/base.yaml -c configs/seg_den.yaml
+
+# viewers are currently just dummy scripts
 viewer_human:
     python viewer.py -c configs/base.yaml -c configs/human.yaml
 
@@ -40,3 +55,16 @@ viewer_mouse:
 
 viewer_seg_den:
     python viewer.py -c configs/base.yaml -c configs/seg_den.yaml
+
+test_seg_den:
+    python test.py -c configs/base.yaml -c configs/seg_den.yaml
+
+# used to extract unsharded skeletons from cloudvolume
+visualize_human:
+    python visualize.py -c configs/base.yaml -c configs/human.yaml
+
+visualize_mouse:
+    python visualize.py -c configs/base.yaml -c configs/mouse.yaml
+
+visualize_seg_den:
+    python visualize.py -c configs/base.yaml -c configs/seg_den.yaml

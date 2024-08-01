@@ -1,3 +1,4 @@
+import os
 import argparse
 from cloudvolume import Vec
 from omegaconf import OmegaConf
@@ -7,17 +8,20 @@ from utils import DotDict
 
 
 def main(conf):
-    tq = LocalTaskQueue(parallel=conf.n_jobs_skeletonize)
-
+    tq = LocalTaskQueue(parallel=conf.n_jobs_mesh)
     layer = f"file://{conf.data.output_layer}"
-    skeletonize_tasks = tc.create_skeletonizing_tasks(layer, **conf.skeletonize)
-    tq.insert(skeletonize_tasks)
+    # create conf.data.output_layer/mesh directory
+    if not os.path.exists(f"{conf.data.output_layer}/mesh"):
+        os.makedirs(f"{conf.data.output_layer}/mesh")
+
+    tasks = tc.create_meshing_tasks(  # First Pass
+        layer, **conf.mesh  # Which data layer
+    )
+    tq.insert(tasks)
     tq.execute()
 
-    merge_tasks = tc.create_unsharded_skeleton_merge_tasks(
-        layer, **conf.skeletonize_merge
-    )
-    tq.insert(merge_tasks)
+    tasks = tc.create_mesh_manifest_tasks(layer, **conf.mesh_merge)
+    tq.insert(tasks)
     tq.execute()
 
 

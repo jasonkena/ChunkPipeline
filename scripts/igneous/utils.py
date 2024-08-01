@@ -1,3 +1,6 @@
+from joblib.externals.loky import get_reusable_executor
+
+
 class DotDict(dict):
     # modified from https://stackoverflow.com/a/13520518/10702372
     """
