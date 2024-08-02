@@ -1,9 +1,7 @@
-import argparse
 from cloudvolume import Vec
-from omegaconf import OmegaConf
 import igneous.task_creation as tc
 from taskqueue import LocalTaskQueue
-from utils import DotDict
+from utils import get_conf
 
 
 def main(conf):
@@ -22,25 +20,5 @@ def main(conf):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        action="append",
-        help="List of configuration files.",
-        required=True,
-    )
-
-    args = parser.parse_args()
-    print(args.config)
-
-    confs = [OmegaConf.load(c) for c in args.config]
-    conf = OmegaConf.merge(*confs)
-
-    # cast to dictionary, because hash of OmegaConf fields depend on greater object
-    conf = OmegaConf.to_container(conf, resolve=True)
-    assert isinstance(conf, dict), "conf must be a dictionary"
-    # allow dot access
-    conf = DotDict(conf)
-
+    conf = get_conf()
     main(conf)

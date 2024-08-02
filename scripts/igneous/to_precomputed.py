@@ -6,9 +6,8 @@ from joblib import Parallel, delayed
 
 # import cloudvolume as cv
 import h5py
-import argparse
-from omegaconf import OmegaConf
 from typing import List, Tuple
+from utils import get_conf
 
 
 def initialize_cloudvolume(
@@ -128,20 +127,7 @@ def save_mapping(res, output_file):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        action="append",
-        help="List of configuration files.",
-        required=True,
-    )
-
-    args = parser.parse_args()
-    print(args.config)
-
-    confs = [OmegaConf.load(c) for c in args.config]
-    conf = OmegaConf.merge(*confs)
+    conf = get_conf()
 
     output_vol = initialize_cloudvolume(
         conf.data["seg"],

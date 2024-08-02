@@ -1,4 +1,5 @@
-from joblib.externals.loky import get_reusable_executor
+import argparse
+from omegaconf import OmegaConf
 
 
 class DotDict(dict):
@@ -45,3 +46,27 @@ class DotDict(dict):
 
     def __setstate__(self, state):
         self.update(state)
+
+
+def get_conf():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--config",
+        action="append",
+        help="List of configuration files.",
+        required=True,
+    )
+
+    args = parser.parse_args()
+
+    confs = [OmegaConf.load(c) for c in args.config]
+    conf = OmegaConf.merge(*confs)
+
+    # cast to dictionary, because hash of OmegaConf fields depend on greater object
+    conf = OmegaConf.to_container(conf, resolve=True)
+    assert isinstance(conf, dict), "conf must be a dictionary"
+    # allow dot access
+    conf = DotDict(conf)
+
+    return conf

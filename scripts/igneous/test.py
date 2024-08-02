@@ -1,10 +1,9 @@
 import numpy as np
-import argparse
-from omegaconf import OmegaConf
 from joblib import Parallel, delayed
 import h5py
 from to_precomputed import get_chunks
 from tqdm import tqdm
+from utils import get_conf
 
 """
 just used to debug seg_den_seg
@@ -42,19 +41,5 @@ def main(conf):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        action="append",
-        help="List of configuration files.",
-        required=True,
-    )
-
-    args = parser.parse_args()
-    print(args.config)
-
-    confs = [OmegaConf.load(c) for c in args.config]
-    conf = OmegaConf.merge(*confs)
-
+    conf = get_conf()
     main(conf)

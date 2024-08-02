@@ -4,8 +4,7 @@ import kimimaro
 import socket
 from collections import defaultdict
 
-import argparse
-from omegaconf import OmegaConf
+from utils import get_conf
 
 
 def read_mappings(mapping: np.ndarray):
@@ -30,9 +29,8 @@ def read_mappings(mapping: np.ndarray):
 
 def main(conf):
     vol = CloudVolume(f"file://{conf.data.output_layer}")
-    breakpoint()
-    vol.viewer()
-    breakpoint()
+    # vol.viewer()
+    # breakpoint()
     mapping = np.load(conf.data.mapping)
 
     seg_to_trunk, trunk_to_segs = read_mappings(mapping)
@@ -55,31 +53,8 @@ def main(conf):
             ]
         )
 
-    np.savez("merged.npz", skel=merged)
-
-
-def local(conf):
-    merged = np.load("merged.npz", allow_pickle=True)["skel"].item()
-    breakpoint()
-
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-c",
-        "--config",
-        action="append",
-        help="List of configuration files.",
-        required=True,
-    )
+    conf = get_conf()
 
-    args = parser.parse_args()
-    print(args.config)
-
-    confs = [OmegaConf.load(c) for c in args.config]
-    conf = OmegaConf.merge(*confs)
-
-    if "think-jason" in socket.gethostname():
-        local(conf)
-    else:
-        main(conf)
+    main(conf)

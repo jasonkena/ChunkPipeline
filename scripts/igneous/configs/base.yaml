@@ -8,13 +8,13 @@ skeletonize:
   mip: 0
   shape: ${chunk_size}
   sharded: False
-  dust_threshold: 1000
+  dust_threshold: 200
   progress: True
   parallel: 1
   fill_missing: False
   teasar_params:
     scale: 1.5
-    const: 300
+    const: 10000
     soma_detection_threshold: 1500
     soma_acceptance_threshold: 3500
     soma_invalidation_scale: 2
@@ -25,7 +25,7 @@ skeletonize:
 skeletonize_merge:
   crop: 0
   magnitude: 3
-  dust_threshold: 1000
+  dust_threshold: 200
   tick_threshold: 3500
   delete_fragments: False
 
@@ -35,6 +35,10 @@ mesh:
   sharded: False
   progress: True
   spatial_index: False
+  # waiting for this to resolve
+  # https://github.com/seung-lab/igneous/pull/178
+  mesh_dir: mesh
 
 mesh_merge:
   magnitude: 3
+  mesh_dir: mesh
