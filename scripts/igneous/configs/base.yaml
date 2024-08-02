@@ -3,6 +3,7 @@ output_dir: "outputs"
 n_jobs_precompute: 128
 n_jobs_skeletonize: 32
 n_jobs_mesh: 32
+n_jobs_touching_centroids: 32
 
 skeletonize:
   mip: 0
@@ -42,3 +43,6 @@ mesh:
 mesh_merge:
   magnitude: 3
   mesh_dir: mesh
+
+touching_centroids:
+  connectivity: 6

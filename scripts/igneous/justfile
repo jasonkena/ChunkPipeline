@@ -68,3 +68,12 @@ visualize_mouse:
 
 visualize_seg_den:
     python visualize.py -c configs/base.yaml -c configs/seg_den.yaml
+
+touching_human:
+    python get_touching_centroids.py -c configs/base.yaml -c configs/human.yaml
+
+touching_mouse:
+    python get_touching_centroids.py -c configs/base.yaml -c configs/mouse.yaml
+
+touching_seg_den:
+    python get_touching_centroids.py -c configs/base.yaml -c configs/seg_den.yaml

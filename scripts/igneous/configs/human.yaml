@@ -10,3 +10,4 @@ data:
   seg_key: "main"
   output_layer : ${output_dir}/${name}/output_layer
   mapping : ${output_dir}/${name}/mapping.npy
+  touching: ${output_dir}/${name}/touching.npy
