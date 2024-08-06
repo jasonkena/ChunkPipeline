@@ -77,3 +77,12 @@ touching_mouse:
 
 touching_seg_den:
     python get_touching_centroids.py -c configs/base.yaml -c configs/seg_den.yaml
+
+seed_human:
+    python seed.py -c configs/base.yaml -c configs/human.yaml
+
+seed_mouse:
+    python seed.py -c configs/base.yaml -c configs/mouse.yaml
+
+seed_seg_den:
+    python seed.py -c configs/base.yaml -c configs/seg_den.yaml
