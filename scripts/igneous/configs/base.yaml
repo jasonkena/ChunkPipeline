@@ -4,6 +4,8 @@ n_jobs_precompute: 128
 n_jobs_skeletonize: 32
 n_jobs_mesh: 32
 n_jobs_touching_centroids: 32
+n_jobs_feature_transform: 8
+n_jobs_pc: 32
 
 skeletonize_trunk:
   mip: 0
@@ -64,3 +66,9 @@ mesh_merge:
 
 touching_centroids:
   connectivity: 6
+
+feature_transform:
+  radii_multiplier: 2.0
+
+point_cloud:
+  chunk_size: 4096

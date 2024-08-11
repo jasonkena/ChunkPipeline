@@ -69,6 +69,7 @@ visualize_mouse:
 visualize_seg_den:
     python visualize.py -c configs/base.yaml -c configs/seg_den.yaml
 
+# NOT USED since kimimaro dropping spines fixed
 touching_human:
     python get_touching_centroids.py -c configs/base.yaml -c configs/human.yaml
 
@@ -79,10 +80,19 @@ touching_seg_den:
     python get_touching_centroids.py -c configs/base.yaml -c configs/seg_den.yaml
 
 seed_human:
-    python seed.py -c configs/base.yaml -c configs/human.yaml
+    python feature_transform.py -c configs/base.yaml -c configs/human.yaml
 
 seed_mouse:
-    python seed.py -c configs/base.yaml -c configs/mouse.yaml
+    python feature_transform.py -c configs/base.yaml -c configs/mouse.yaml
 
 seed_seg_den:
-    python seed.py -c configs/base.yaml -c configs/seg_den.yaml
+    python feature_transform.py -c configs/base.yaml -c configs/seg_den.yaml
+
+pc_human:
+    python point_cloud.py -c configs/base.yaml -c configs/human.yaml
+
+pc_mouse:
+    python point_cloud.py -c configs/base.yaml -c configs/mouse.yaml
+
+pc_seg_den:
+    python point_cloud.py -c configs/base.yaml -c configs/seg_den.yaml
