@@ -60,7 +60,7 @@ def feature_transform(conf):
     skeletons {id:Skeleton}
 
     and seeds
-    skeleton_ids: [which dendrite]
+    skeleton_ids: [which skeleton (either trunk/skel)]
     vertex_ids: [order of vertices in skeleton]
     seed_ids: [indices of vertices in skeleton] (one-based indexing)
     seed_coords: [coordinates of vertices in skeleton] (isotropic)
@@ -104,12 +104,26 @@ def feature_transform(conf):
     seed_dtype = np.min_scalar_type(len(seed_coords))
     seed_ids = np.arange(1, len(seed_coords) + 1, dtype=seed_dtype)
 
+    structured_seeds = np.zeros(
+        len(seed_coords),
+        dtype=[
+            ("skeleton_id", skeleton_ids.dtype),
+            ("vertex_id", vertex_ids.dtype),
+            ("seed_coord_x", seed_coords.dtype),
+            ("seed_coord_y", seed_coords.dtype),
+            ("seed_coord_z", seed_coords.dtype),
+            ("seed_id", seed_dtype),
+        ],
+    )
+    structured_seeds["skeleton_id"] = skeleton_ids
+    structured_seeds["vertex_id"] = vertex_ids
+    structured_seeds["seed_coord_x"] = seed_coords[:, 0]
+    structured_seeds["seed_coord_y"] = seed_coords[:, 1]
+    structured_seeds["seed_coord_z"] = seed_coords[:, 2]
+    structured_seeds["seed_id"] = seed_ids
     np.savez(
         conf.data.seed,
-        skeleton_ids=skeleton_ids,
-        vertex_ids=vertex_ids,
-        seed_coords=seed_coords,
-        seed_ids=seed_ids,
+        seed_data=structured_seeds,
         skeletons=skeletons,
         max_radius=max_radius,
     )

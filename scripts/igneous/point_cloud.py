@@ -108,7 +108,7 @@ def append_to_point_cloud(
 def to_point_cloud(conf):
     feature = zarr.open(conf.data.feature_zarr, "r")
     seed = np.load(conf.data.seed)
-    seed_ids = seed["seed_ids"]
+    seed_ids = seed["seed_data"]["seed_id"]
 
     group = zarr.group(
         conf.data.pc_zarr,
