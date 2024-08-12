@@ -29,7 +29,7 @@ def read_mappings(mapping: np.ndarray):
 
 def main(conf):
     vol = CloudVolume(f"file://{conf.data.output_layer}")
-    # vol.viewer()
+    vol.viewer()
     # breakpoint()
     mapping = np.load(conf.data.mapping)
 

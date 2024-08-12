@@ -109,17 +109,17 @@ def feature_transform(conf):
         dtype=[
             ("skeleton_id", skeleton_ids.dtype),
             ("vertex_id", vertex_ids.dtype),
-            ("seed_coord_x", seed_coords.dtype),
-            ("seed_coord_y", seed_coords.dtype),
             ("seed_coord_z", seed_coords.dtype),
+            ("seed_coord_y", seed_coords.dtype),
+            ("seed_coord_x", seed_coords.dtype),
             ("seed_id", seed_dtype),
         ],
     )
     structured_seeds["skeleton_id"] = skeleton_ids
     structured_seeds["vertex_id"] = vertex_ids
-    structured_seeds["seed_coord_x"] = seed_coords[:, 0]
+    structured_seeds["seed_coord_z"] = seed_coords[:, 0]
     structured_seeds["seed_coord_y"] = seed_coords[:, 1]
-    structured_seeds["seed_coord_z"] = seed_coords[:, 2]
+    structured_seeds["seed_coord_x"] = seed_coords[:, 2]
     structured_seeds["seed_id"] = seed_ids
     np.savez(
         conf.data.seed,

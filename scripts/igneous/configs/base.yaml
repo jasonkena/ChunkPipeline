@@ -72,3 +72,6 @@ feature_transform:
 
 point_cloud:
   chunk_size: 4096
+
+dataloader:
+  path_length: 10000

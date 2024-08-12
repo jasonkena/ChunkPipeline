@@ -96,3 +96,12 @@ pc_mouse:
 
 pc_seg_den:
     python point_cloud.py -c configs/base.yaml -c configs/seg_den.yaml
+
+dataloader_human:
+    python dataloader.py -c configs/base.yaml -c configs/human.yaml
+
+dataloader_mouse:
+    python dataloader.py -c configs/base.yaml -c configs/mouse.yaml
+
+dataloader_seg_den:
+    python dataloader.py -c configs/base.yaml -c configs/seg_den.yaml
