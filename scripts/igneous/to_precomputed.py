@@ -75,6 +75,7 @@ def write_modified_chunk(
     assert np.all(np.logical_or(seg_data == 0, raw_data > 0))
 
     # give trunks id of original seg
+    # NOTE: assumes that raw_labels and seg_labels are disjoint
     output_data = raw_data * (seg_data == 0) + seg_data
 
     seg_raw_mapping = np.stack(

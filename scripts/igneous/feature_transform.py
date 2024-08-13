@@ -12,10 +12,13 @@ from typing import List, Tuple, Union
 
 import scipy
 
+from kd_feature_transform import kd_feature_transform_chunk
+
 
 def feature_transform_chunk(
     seed, feature, slice: List[slice], anisotropy: List[float], offset: float
 ):
+    raise NotImplementedError("Use kd_feature_transform_chunk, this is deprecated")
     """
     Given two zarr arrays, seed and feature, and the slice for seed, calculate the feature transform
     i.e., for every voxel calculate the closest seed point (skeleton point), taking into account anisotropy
@@ -161,8 +164,9 @@ def feature_transform(conf):
     )
 
     chunks = get_chunks(vol.shape, conf.chunk_size)
-    # feature_transform_chunk(
+    # kd_feature_transform_chunk(
     #     seed,
+    #     vol,
     #     feature,
     #     chunks[0],
     #     conf.anisotropy,
@@ -172,8 +176,9 @@ def feature_transform(conf):
     res = list(
         tqdm(
             Parallel(n_jobs=conf.n_jobs_feature_transform, return_as="generator")(
-                delayed(feature_transform_chunk)(
+                delayed(kd_feature_transform_chunk)(
                     seed,
+                    vol,
                     feature,
                     c,
                     conf.anisotropy,

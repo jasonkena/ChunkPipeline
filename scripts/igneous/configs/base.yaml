@@ -75,3 +75,4 @@ point_cloud:
 
 dataloader:
   path_length: 10000
+  num_points: 30000

@@ -238,6 +238,12 @@ def sample_path(pc_group, trunk_path, trunk_seed_id_to_seed_ids, num_points):
     return points
 
 
+def vertex_path_to_seed_path(trunk_id, vertex_path, seed_id_to_trunk_seed_id):
+    return [
+        seed_id_to_trunk_seed_id[(trunk_id, vertex_id)] for vertex_id in vertex_path
+    ]
+
+
 def visualize_batch(pc, trunk_skel):
     # assumes anisotropic
     import open3d as o3d
@@ -279,33 +285,27 @@ def main(conf):
         skeleton_id_to_seed_id = skel_id_to_seed_id_mapping(seed_data)
 
         skeletons = skeletons.item()
+        skeletons = {k: nx_from_skel(v) for k, v in skeletons.items()}
         trunk_ids = sorted(trunk_to_segs.keys())
 
-        # in seed_id_paths
-        trunk_paths: Dict[int, List[List[int]]] = {}
-        for trunk_id in trunk_ids:
-            vertex_id_paths = find_all_paths(
-                nx_from_skel(skeletons[trunk_id]), conf.dataloader.path_length
-            )
-            seed_id_paths = []
-            for path in vertex_id_paths:
-                seed_id_paths.append(
-                    [
-                        skeleton_id_to_seed_id[(trunk_id, vertex_id)]
-                        for vertex_id in path
-                    ]
-                )
-            trunk_paths[trunk_id] = seed_id_paths
+        random_trunk_id = np.random.choice(trunk_ids)
+
+        random_path = vertex_path_to_seed_path(
+            random_trunk_id,
+            get_random_path(skeletons[random_trunk_id], conf.dataloader.path_length),
+            skeleton_id_to_seed_id,
+        )
 
         # contains ANISOTROPIC coords
         pc_group = zarr.open_group(conf.data.pc_zarr, mode="r")
 
-        path = trunk_paths[trunk_ids[0]][0]
         seed_id_to_row = seed_id_to_row_mapping(seed_data)
         # NOTE: zyx are in anisotropic coords
-        points = sample_path(pc_group, path, trunk_seed_id_to_seed_ids, 1000)
+        points = sample_path(
+            pc_group, random_path, trunk_seed_id_to_seed_ids, conf.dataloader.num_points
+        )
 
-        trunk_points = [seed_id_to_row[seed_id] for seed_id in path]
+        trunk_points = [seed_id_to_row[seed_id] for seed_id in random_path]
         trunk_pc = np.stack(
             [
                 np.array([point[f"seed_coord_{c}"] for c in "zyx"])
@@ -326,6 +326,7 @@ def main(conf):
 from magicpickle import MagicPickle
 
 if __name__ == "__main__":
+    np.random.seed(42)
     with MagicPickle("think-jason") as mp:
         if mp.is_remote:
             conf = get_conf()
