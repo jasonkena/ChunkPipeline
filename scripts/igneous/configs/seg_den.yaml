@@ -4,7 +4,48 @@ _base_dir: "/mmfs1/data/adhinart/dendrite"
 
 skeletonize_trunk:
   teasar_params:
-    - ids: [1, 2, 3, 4, 5, 8, 9, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 23, 24, 26, 27, 28, 30, 32, 33, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 50]
+    - ids:
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          8,
+          9,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          19,
+          20,
+          21,
+          23,
+          24,
+          26,
+          27,
+          28,
+          30,
+          32,
+          33,
+          35,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          50,
+        ]
       mip: 4
       const: 10000
       scale: 1.5
@@ -40,7 +81,7 @@ data:
   seg_key: "main"
 
   output_layer: ${output_dir}/${name}/output_layer
-  mapping : ${output_dir}/${name}/mapping.npy
+  mapping: ${output_dir}/${name}/mapping.npy
   touching: ${output_dir}/${name}/touching.npz
   seed: ${output_dir}/${name}/seed.npz
   seed_zarr: ${output_dir}/${name}/seed.zarr

@@ -190,6 +190,7 @@ def groupby(array: np.ndarray, idx: np.ndarray) -> Tuple[np.ndarray, List[np.nda
 
     return unique_idx, groups
 
+
 def hash_file_or_dir(path: str, algorithm: str = "md5") -> str:
     """
     Given a path to a file or directory, return the hash of the file or directory

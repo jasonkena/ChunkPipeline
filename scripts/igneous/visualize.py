@@ -42,7 +42,6 @@ def main(conf):
         if len(skeletons[seg_id].vertices) == 0:
             print(f"ID: {seg_id} is empty")
 
-
     # # NOTE: some of these skeletons are empty
     # skeletons = {int(k): vol.skeleton.get(k) for k in seg_ids}
     # for seg_id in seg_to_trunk.keys():

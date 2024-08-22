@@ -22,7 +22,7 @@ def get_unique_chunk(chunk, raw, raw_key, spine, spine_key, seg, seg_key):
     seg_unique = np.unique(seg_chunk)
 
     num_contradict = np.sum((spine_chunk > 0) != (seg_chunk > 0))
-    
+
     res = {
         "raw": raw_unique,
         "spine": spine_unique,
@@ -54,7 +54,7 @@ def main(conf):
             leave=False,
         )
     )
-    
+
     merged_res = {
         "raw": set(),
         "spine": set(),
@@ -69,9 +69,11 @@ def main(conf):
     merged_res["raw"] = np.array(sorted(merged_res["raw"]))
     merged_res["spine"] = np.array(sorted(merged_res["spine"]))
     merged_res["seg"] = np.array(sorted(merged_res["seg"]))
-    
+
     np.savez(conf.data.broken_debug, merged_res=merged_res)
-'''
+
+
+"""
 # np.savez("seg_den_debug.npz", res=res)
 merged_res
 {'raw': array([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
@@ -90,7 +92,7 @@ merged_res
 240682111200
 >>> 27926940/240682111200
 0.00011603247063423632
-'''
+"""
 
 
 if __name__ == "__main__":

@@ -13,7 +13,9 @@ def main(conf):
     try:
         volume = cloudvolume.CloudVolume(layer)
     except:
-        print("delete previous mip files, and skeleton files which may have been created with previous mips")
+        print(
+            "delete previous mip files, and skeleton files which may have been created with previous mips"
+        )
         raise UserWarning("Layer does not exist")
 
     for i in range(len(conf.downsample.factors)):

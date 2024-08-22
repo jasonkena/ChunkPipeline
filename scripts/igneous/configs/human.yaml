@@ -8,8 +8,8 @@ data:
   spine_key: "main"
   seg: ${_base_dir}/raw/${name}_seg.h5
   seg_key: "main"
-  output_layer : ${output_dir}/${name}/output_layer
-  mapping : ${output_dir}/${name}/mapping.npy
+  output_layer: ${output_dir}/${name}/output_layer
+  mapping: ${output_dir}/${name}/mapping.npy
   touching: ${output_dir}/${name}/touching.npz
   seed: ${output_dir}/${name}/seed.npz
   seed_zarr: ${output_dir}/${name}/seed.zarr

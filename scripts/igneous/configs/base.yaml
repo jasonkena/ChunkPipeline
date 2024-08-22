@@ -11,7 +11,7 @@ n_jobs_pc: 32
 
 downsample:
   chunk_size: [64, 64, 64] # otherwise fails to downsample some mips
-  factors: 
+  factors:
     - [1, 2, 2]
     - [1, 2, 2]
     - [2, 2, 2]
@@ -19,9 +19,9 @@ downsample:
     - [2, 2, 2]
     - [2, 2, 2]
 
-# teasar_params is a list of either one dict
-# has to be a list so omegaconf can merge
-# teasar_params:
+    # teasar_params is a list of either one dict
+    # has to be a list so omegaconf can merge
+    # teasar_params:
     - mip: 0
       scale: ...
 #     const: ...
@@ -42,8 +42,7 @@ skeletonize_trunk:
   parallel: 1
   fill_missing: False
   teasar_params:
-    - 
-      mip: 0
+    - mip: 0
       scale: 1.5
       const: 10000
 

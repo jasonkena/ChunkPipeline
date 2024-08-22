@@ -24,16 +24,27 @@ def main(conf):
     if len(trunk_teasar_conf) == 1:
         mip = trunk_teasar_conf[0].pop("mip")
         skeletonize_trunk_tasks = tc.create_skeletonizing_tasks(
-            layer, **trunk_conf, mip = mip, teasar_params = trunk_teasar_conf[0], object_ids=trunk_ids
+            layer,
+            **trunk_conf,
+            mip=mip,
+            teasar_params=trunk_teasar_conf[0],
+            object_ids=trunk_ids,
         )
         tq.insert(skeletonize_trunk_tasks)
     else:
-        assert sorted([item for sublist in trunk_teasar_conf for item in sublist.ids]) == trunk_ids, "Trunk ids do not match, either duplicate or missing"
+        assert (
+            sorted([item for sublist in trunk_teasar_conf for item in sublist.ids])
+            == trunk_ids
+        ), "Trunk ids do not match, either duplicate or missing"
         for teasar_params in trunk_teasar_conf:
             object_ids = teasar_params.pop("ids")
             mip = teasar_params.pop("mip")
             skeletonize_trunk_tasks = tc.create_skeletonizing_tasks(
-                layer, **trunk_conf, mip=mip, teasar_params = teasar_params, object_ids=object_ids
+                layer,
+                **trunk_conf,
+                mip=mip,
+                teasar_params=teasar_params,
+                object_ids=object_ids,
             )
             tq.insert(skeletonize_trunk_tasks)
 
