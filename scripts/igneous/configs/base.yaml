@@ -1,14 +1,40 @@
 chunk_size: [512, 512, 512]
 output_dir: "outputs"
+n_jobs_debug: 32
 n_jobs_precompute: 128
+n_jobs_downsample: 32
 n_jobs_skeletonize: 32
 n_jobs_mesh: 32
 n_jobs_touching_centroids: 32
 n_jobs_feature_transform: 8
 n_jobs_pc: 32
 
+downsample:
+  chunk_size: [64, 64, 64] # otherwise fails to downsample some mips
+  factors: 
+    - [1, 2, 2]
+    - [1, 2, 2]
+    - [2, 2, 2]
+    - [2, 2, 2]
+    - [2, 2, 2]
+    - [2, 2, 2]
+
+# teasar_params is a list of either one dict
+# has to be a list so omegaconf can merge
+# teasar_params:
+    - mip: 0
+      scale: ...
+#     const: ...
+#
+# or multiple elements, but ids must be specified for each
+# teasar_params:
+#   - ids: [1, 2, 3]
+#     scale: ...
+#     const: ...
+#   - id: [4, 5, 6]
+#     scale: ...
+#     const: ...
 skeletonize_trunk:
-  mip: 0
   shape: ${chunk_size}
   sharded: False
   dust_threshold: 0
@@ -16,37 +42,27 @@ skeletonize_trunk:
   parallel: 1
   fill_missing: False
   teasar_params:
-    scale: 1.5
-    const: 10000
-    soma_detection_threshold: 1500
-    soma_acceptance_threshold: 3500
-    soma_invalidation_scale: 2
-    soma_invalidation_const: 300
-    pdrf_scale: 100000
-    pdrf_exponent: 4
+    - 
+      mip: 0
+      scale: 1.5
+      const: 10000
 
 skeletonize_spines:
   mip: 0
   shape: ${chunk_size}
   sharded: False
-  dust_threshold: 0
+  dust_threshold: 1000
   progress: True
   parallel: 1
   fill_missing: False
   teasar_params:
-    scale: 1.5
-    const: 300
-    soma_detection_threshold: 1500
-    soma_acceptance_threshold: 3500
-    soma_invalidation_scale: 2
-    soma_invalidation_const: 300
-    pdrf_scale: 100000
-    pdrf_exponent: 4
+    - scale: 1.5
+      const: 300
 
 skeletonize_merge:
   crop: 0
   magnitude: 3
-  dust_threshold: 0
+  dust_threshold: 1000
   tick_threshold: 3500
   delete_fragments: False
 

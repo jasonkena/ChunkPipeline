@@ -1,5 +1,5 @@
 import numpy as np
-from cloudvolume import Vec
+import cloudvolume
 import igneous.task_creation as tc
 from taskqueue import LocalTaskQueue
 from utils import get_conf
@@ -18,14 +18,42 @@ def main(conf):
 
     layer = f"file://{conf.data.output_layer}"
 
-    skeletonize_trunk_tasks = tc.create_skeletonizing_tasks(
-        layer, **conf.skeletonize_trunk, object_ids=trunk_ids
-    )
-    tq.insert(skeletonize_trunk_tasks)
-    skeletonize_spines_tasks = tc.create_skeletonizing_tasks(
-        layer, **conf.skeletonize_spines, object_ids=spine_ids
-    )
-    tq.insert(skeletonize_spines_tasks)
+    trunk_conf = conf.skeletonize_trunk
+    trunk_teasar_conf = trunk_conf.pop("teasar_params")
+    assert isinstance(trunk_teasar_conf, list) and len(trunk_teasar_conf) >= 1
+    if len(trunk_teasar_conf) == 1:
+        mip = trunk_teasar_conf[0].pop("mip")
+        skeletonize_trunk_tasks = tc.create_skeletonizing_tasks(
+            layer, **trunk_conf, mip = mip, teasar_params = trunk_teasar_conf[0], object_ids=trunk_ids
+        )
+        tq.insert(skeletonize_trunk_tasks)
+    else:
+        assert sorted([item for sublist in trunk_teasar_conf for item in sublist.ids]) == trunk_ids, "Trunk ids do not match, either duplicate or missing"
+        for teasar_params in trunk_teasar_conf:
+            object_ids = teasar_params.pop("ids")
+            mip = teasar_params.pop("mip")
+            skeletonize_trunk_tasks = tc.create_skeletonizing_tasks(
+                layer, **trunk_conf, mip=mip, teasar_params = teasar_params, object_ids=object_ids
+            )
+            tq.insert(skeletonize_trunk_tasks)
+
+    # spine_conf = conf.skeletonize_spines
+    # spine_teasar_conf = spine_conf.pop("teasar_params")
+    # assert isinstance(spine_teasar_conf, list) and len(spine_teasar_conf) >= 1
+    # if len(spine_teasar_conf) == 1:
+    #     skeletonize_spine_tasks = tc.create_skeletonizing_tasks(
+    #         layer, **spine_conf, teasar_params = spine_teasar_conf[0], object_ids=spine_ids
+    #     )
+    #     tq.insert(skeletonize_spine_tasks)
+    # else:
+    #     assert sorted([item for sublist in spine_teasar_conf for item in sublist.ids]) == spine_ids, "spine ids do not match, either duplicate or missing"
+    #     for teasar_params in spine_teasar_conf:
+    #         object_ids = teasar_params.pop("ids")
+    #         skeletonize_spine_tasks = tc.create_skeletonizing_tasks(
+    #             layer, **spine_conf, teasar_params = teasar_params, object_ids=object_ids
+    #         )
+    #         tq.insert(skeletonize_spine_tasks)
+
     tq.execute()
 
     merge_tasks = tc.create_unsharded_skeleton_merge_tasks(

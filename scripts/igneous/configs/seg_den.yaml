@@ -1,13 +1,44 @@
 name: seg_den
 anisotropy: [30, 6, 6]
 _base_dir: "/mmfs1/data/adhinart/dendrite"
+
+skeletonize_trunk:
+  teasar_params:
+    - ids: [1, 2, 3, 4, 5, 8, 9, 11, 12, 13, 14, 15, 16, 17, 19, 20, 21, 23, 24, 26, 27, 28, 30, 32, 33, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 50]
+      mip: 4
+      const: 10000
+      scale: 1.5
+    - ids: [7, 10, 18, 25, 31, 36, 49]
+      mip: 4
+      const: 5000
+      scale: 1.5
+    - ids: [6, 22, 29, 34]
+      mip: 4
+      const: 2000
+      scale: 1.5
+
+skeletonize_spines:
+  teasar_params:
+    - const: 200
+      scale: 1.5
+
 data:
-  raw: ${_base_dir}/raw/${name}_raw.h5
+  broken_debug: ${output_dir}/${name}/broken_debug.npz
+
+  broken_raw: ${_base_dir}/raw/${name}_raw.h5
+  broken_raw_key: "main"
+  broken_spine: ${_base_dir}/raw/${name}_spine.h5
+  broken_spine_key: "main"
+  broken_seg: ${_base_dir}/raw/${name}_seg.h5
+  broken_seg_key: "main"
+
+  raw: ${_base_dir}/raw/${name}_raw_fixed.h5
   raw_key: "main"
-  spine: ${_base_dir}/raw/${name}_spine.h5
+  spine: ${_base_dir}/raw/${name}_spine_fixed.h5
   spine_key: "main"
-  seg: ${_base_dir}/raw/${name}_seg.h5
+  seg: ${_base_dir}/raw/${name}_seg_fixed.h5
   seg_key: "main"
+
   output_layer: ${output_dir}/${name}/output_layer
   mapping : ${output_dir}/${name}/mapping.npy
   touching: ${output_dir}/${name}/touching.npz

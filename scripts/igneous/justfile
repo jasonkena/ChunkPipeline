@@ -18,6 +18,15 @@ precompute_all:
     python to_precomputed.py -c configs/base.yaml -c configs/mouse.yaml
     python to_precomputed.py -c configs/base.yaml -c configs/seg_den.yaml
 
+downsample_human:
+    python downsample.py -c configs/base.yaml -c configs/human.yaml
+
+downsample_mouse:
+    python downsample.py -c configs/base.yaml -c configs/mouse.yaml
+
+downsample_seg_den:
+    python downsample.py -c configs/base.yaml -c configs/seg_den.yaml
+
 skeletonize_human:
     python skeletonize.py -c configs/base.yaml -c configs/human.yaml
 
@@ -56,8 +65,11 @@ viewer_mouse:
 viewer_seg_den:
     python viewer.py -c configs/base.yaml -c configs/seg_den.yaml
 
-test_seg_den:
-    python test.py -c configs/base.yaml -c configs/seg_den.yaml
+debug_seg_den:
+    python debug_seg_den.py -c configs/base.yaml -c configs/seg_den.yaml
+
+fix_seg_den:
+    python fix_seg_den.py -c configs/base.yaml -c configs/seg_den.yaml
 
 # used to extract unsharded skeletons from cloudvolume
 visualize_human:

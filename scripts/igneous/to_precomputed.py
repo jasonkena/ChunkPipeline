@@ -67,10 +67,7 @@ def write_modified_chunk(
     seg_data = h5py.File(seg_dataset, "r")[seg_key][slice]
 
     # seg_den_seg currently triggers this, waiting for new files
-    try:
-        assert np.all((spine_data > 0) == (seg_data > 0))
-    except AssertionError:
-        print(f"Spine and seg data mismatch at {slice}")
+    assert np.all((spine_data > 0) == (seg_data > 0))
     # check that seg_data > 0 implies raw_data > 0
     assert np.all(np.logical_or(seg_data == 0, raw_data > 0))
 

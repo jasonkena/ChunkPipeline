@@ -1,3 +1,8 @@
+import os
+import inspect
+from joblib import Memory
+from dirhash import dirhash
+from functools import wraps
 import numpy as np
 import argparse
 from omegaconf import OmegaConf
@@ -184,3 +189,66 @@ def groupby(array: np.ndarray, idx: np.ndarray) -> Tuple[np.ndarray, List[np.nda
     groups = np.split(array, index[1:], axis=0)
 
     return unique_idx, groups
+
+def hash_file_or_dir(path: str, algorithm: str = "md5") -> str:
+    """
+    Given a path to a file or directory, return the hash of the file or directory
+
+    Parameters
+    ----------
+    path
+    algorithm
+
+    Returns
+    -------
+    str
+    """
+    assert os.path.exists(path), f"Path argument does not exist: {path}"
+    path = os.path.abspath(path)
+    if os.path.isdir(path):
+        return dirhash(path, algorithm)
+    else:
+        dirpath = os.path.dirname(path)
+        filename = os.path.basename(path)
+        return dirhash(dirpath, algorithm, match=[filename])
+
+
+def cache_path(mem: Memory, path_args: Union[str, List[str]]):
+    """
+    Given a function that takes in path arguments, @mem.cache the function based on the hash of the path arguments
+    Works by passing the hash into a cached function that ignores the hash and calls the original function
+
+    Usage:
+    @cache_path(mem, "path")
+    def my_func(path):
+        pass
+
+    Parameters
+    ----------
+    mem
+    path_args
+    """
+    # adapted from decorator pattern from https://stackoverflow.com/a/42581103/10702372
+
+    if isinstance(path_args, str):
+        path_args = [path_args]
+
+    def decorator(function):
+        # assigns __name__ to ignore_path_hash, necessary since mem.cache assigns based on __name__
+        @wraps(function)
+        def ignore_path_hash(path_hash, *args, **kwargs):
+            return function(*args, **kwargs)
+
+        def wrapper(*args, **kwargs):
+            callargs = inspect.getcallargs(function, *args, **kwargs)
+            assert all(
+                [key in callargs for key in path_args]
+            ), f"Missing keys: {path_args}"
+
+            path_hash = [hash_file_or_dir(callargs[key]) for key in path_args]
+
+            return mem.cache(ignore_path_hash)(path_hash, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
