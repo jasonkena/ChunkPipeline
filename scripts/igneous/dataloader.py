@@ -293,35 +293,6 @@ def visualize_batch(pc, trunk_skel, label):
     o3d.visualization.draw_geometries([pcd, pcd_trunk])
 
 
-def main(conf):
-    """
-    seg_id: canonical labelling for each segment trunk/spines
-    trunk_id: canonical labelling for each trunk (subset of seg_id)
-
-    skeleton_ids: for each vertex, which seg_id
-    vertex_ids: for each vertex, which index in the skeleton (multiple 0s)
-    seed_coord_z/y/x: for each vertex, the ISOTROPIC coordinates
-    seed_id: canonical vertex
-
-    skeletons: cloudvolume skeletons {seg_id: skel}
-    max_radius: max radius of all skeletons
-    """
-    if mp.is_remote:
-        dataset = FreSegDataset(
-            conf.data.mapping,
-            conf.data.seed,
-            conf.data.pc_zarr,
-            conf.dataloader.path_length,
-            conf.dataloader.num_points,
-            conf.anisotropy,
-        )
-        trunk_id, pc, trunk_pc, label = dataset[0]
-        mp.save((trunk_id, pc, trunk_pc, label))
-    else:
-        trunk_id, pc, trunk_pc, label = mp.load()
-        visualize_batch(pc, trunk_pc, label)
-
-
 class FreSegDataset(Dataset):
     def __init__(
         self,
@@ -331,7 +302,29 @@ class FreSegDataset(Dataset):
         path_length: float,
         num_points: int,
         anisotropy: Tuple[float, float, float],
+        folds: List[List[int]],
+        fold: int,
+        is_train: bool,
     ):
+        """
+        Initialize the FreSegDataset object with given parameters and load necessary data.
+        Parameters
+        ----------
+        mapping_path : str
+        seed_path : str
+        pc_zarr_path : str
+        path_length : float
+            geodesic distance to sample
+        num_points : int
+            num points to sample
+        anisotropy : Tuple[float, float, float]
+        folds : List[List[int]]
+        fold : int
+        is_train : bool
+            used to determine which folds to use
+        """
+        assert 0 <= fold < len(folds)
+
         self.num_points = num_points
         self.pc_zarr_path = pc_zarr_path
         self.anisotropy = anisotropy
@@ -349,6 +342,16 @@ class FreSegDataset(Dataset):
 
         skeletons = skeletons.item()
         self.skeletons = {k: nx_from_skel(v) for k, v in skeletons.items()}
+
+        if is_train:
+            trunk_ids = [
+                item
+                for idx, sublist in enumerate(folds)
+                if idx != fold
+                for item in sublist
+            ]
+        else:
+            trunk_ids = folds[fold]
 
         trunk_ids = sorted(trunk_to_segs.keys())
         for k in trunk_ids:
@@ -371,8 +374,8 @@ class FreSegDataset(Dataset):
 
     def get_path_by_idx(self, idx):
         # given an index, return the trunk_id and path
-
-        for k, v in self.spanning_paths.items():
+        for k in sorted(self.spanning_paths.keys()):
+            v = self.spanning_paths[k]
             if idx < len(v):
                 return k, v[idx]
             idx -= len(v)
@@ -410,6 +413,38 @@ class FreSegDataset(Dataset):
         label = points["seg"] > 0
 
         return trunk_id, pc, trunk_pc, label
+
+
+def main(conf):
+    """
+    seg_id: canonical labelling for each segment trunk/spines
+    trunk_id: canonical labelling for each trunk (subset of seg_id)
+
+    skeleton_ids: for each vertex, which seg_id
+    vertex_ids: for each vertex, which index in the skeleton (multiple 0s)
+    seed_coord_z/y/x: for each vertex, the ISOTROPIC coordinates
+    seed_id: canonical vertex
+
+    skeletons: cloudvolume skeletons {seg_id: skel}
+    max_radius: max radius of all skeletons
+    """
+    if mp.is_remote:
+        dataset = FreSegDataset(
+            conf.data.mapping,
+            conf.data.seed,
+            conf.data.pc_zarr,
+            conf.dataloader.path_length,
+            conf.dataloader.num_points,
+            conf.anisotropy,
+            conf.dataloader.folds,
+            fold=0,
+            is_train=True,
+        )
+        trunk_id, pc, trunk_pc, label = dataset[0]
+        mp.save((trunk_id, pc, trunk_pc, label))
+    else:
+        trunk_id, pc, trunk_pc, label = mp.load()
+        visualize_batch(pc, trunk_pc, label)
 
 
 from magicpickle import MagicPickle
