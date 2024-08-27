@@ -47,21 +47,21 @@ skeletonize_trunk:
       const: 10000
 
 skeletonize_spines:
-  mip: 0
   shape: ${chunk_size}
   sharded: False
-  dust_threshold: 1000
+  dust_threshold: 0
   progress: True
   parallel: 1
   fill_missing: False
   teasar_params:
-    - scale: 1.5
+    - mip: 0
+      scale: 1.5
       const: 300
 
 skeletonize_merge:
   crop: 0
   magnitude: 3
-  dust_threshold: 1000
+  dust_threshold: 0
   tick_threshold: 3500
   delete_fragments: False
 
@@ -83,7 +83,8 @@ touching_centroids:
   connectivity: 6
 
 feature_transform:
-  radii_multiplier: 2.0
+  radii_multiplier: 4.0
+  # radii_multiplier: 2.0
 
 point_cloud:
   chunk_size: 4096

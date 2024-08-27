@@ -82,7 +82,13 @@ def feature_transform(conf):
 
     # NOTE: some of these skeletons are empty
     empty_seg_ids = []
-    skeletons = {int(k): vol.skeleton.get(k) for k in seg_ids}
+
+    try:
+        skeletons = {int(k): vol.skeleton.get(k) for k in seg_ids}
+    except Exception as e:
+        print(f"Try decreasing dust_threshold, error: {e}")
+        raise e
+
     for seg_id in seg_to_trunk.keys():
         if len(skeletons[seg_id].vertices) == 0:
             empty_seg_ids.append(seg_id)
@@ -147,6 +153,15 @@ def feature_transform(conf):
 
     anisotropic_seed_coords = (seed_coords / np.array(conf.anisotropy)).astype(int)
     assert not (0 in seed_ids)
+
+    # clamp to within volume
+    max_deviation = max(0, np.max(anisotropic_seed_coords - np.array(vol.shape[:-1])))
+    print("max deviation of voxels from volume shape (should be small)", max_deviation)
+
+    anisotropic_seed_coords = np.clip(
+        anisotropic_seed_coords, 0, np.array(vol.shape[:-1]) - 1
+    )
+
     seed[
         anisotropic_seed_coords[:, 0],
         anisotropic_seed_coords[:, 1],

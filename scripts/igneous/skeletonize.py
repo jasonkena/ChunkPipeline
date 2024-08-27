@@ -48,22 +48,35 @@ def main(conf):
             )
             tq.insert(skeletonize_trunk_tasks)
 
-    # spine_conf = conf.skeletonize_spines
-    # spine_teasar_conf = spine_conf.pop("teasar_params")
-    # assert isinstance(spine_teasar_conf, list) and len(spine_teasar_conf) >= 1
-    # if len(spine_teasar_conf) == 1:
-    #     skeletonize_spine_tasks = tc.create_skeletonizing_tasks(
-    #         layer, **spine_conf, teasar_params = spine_teasar_conf[0], object_ids=spine_ids
-    #     )
-    #     tq.insert(skeletonize_spine_tasks)
-    # else:
-    #     assert sorted([item for sublist in spine_teasar_conf for item in sublist.ids]) == spine_ids, "spine ids do not match, either duplicate or missing"
-    #     for teasar_params in spine_teasar_conf:
-    #         object_ids = teasar_params.pop("ids")
-    #         skeletonize_spine_tasks = tc.create_skeletonizing_tasks(
-    #             layer, **spine_conf, teasar_params = teasar_params, object_ids=object_ids
-    #         )
-    #         tq.insert(skeletonize_spine_tasks)
+    spine_conf = conf.skeletonize_spines
+    spine_teasar_conf = spine_conf.pop("teasar_params")
+    assert isinstance(spine_teasar_conf, list) and len(spine_teasar_conf) >= 1
+    if len(spine_teasar_conf) == 1:
+        mip = spine_teasar_conf[0].pop("mip")
+        skeletonize_spine_tasks = tc.create_skeletonizing_tasks(
+            layer,
+            **spine_conf,
+            mip=mip,
+            teasar_params=spine_teasar_conf[0],
+            object_ids=spine_ids,
+        )
+        tq.insert(skeletonize_spine_tasks)
+    else:
+        assert (
+            sorted([item for sublist in spine_teasar_conf for item in sublist.ids])
+            == spine_ids
+        ), "spine ids do not match, either duplicate or missing"
+        for teasar_params in spine_teasar_conf:
+            object_ids = teasar_params.pop("ids")
+            mip = teasar_params.pop("mip")
+            skeletonize_spine_tasks = tc.create_skeletonizing_tasks(
+                layer,
+                **spine_conf,
+                mip=mip,
+                teasar_params=teasar_params,
+                object_ids=object_ids,
+            )
+            tq.insert(skeletonize_spine_tasks)
 
     tq.execute()
 

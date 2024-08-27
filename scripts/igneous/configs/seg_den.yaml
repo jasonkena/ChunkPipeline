@@ -60,7 +60,8 @@ skeletonize_trunk:
 
 skeletonize_spines:
   teasar_params:
-    - const: 200
+    - mip: 0
+      const: 150
       scale: 1.5
 
 data:

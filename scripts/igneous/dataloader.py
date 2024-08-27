@@ -4,10 +4,12 @@ from utils import get_conf, groupby
 from visualize import read_mappings
 from scipy.spatial import KDTree
 import networkx as nx
+from torch.utils.data import Dataset
 
 from cloudvolume import Skeleton
 from typing import Optional, List, Set, Iterator, Tuple, Dict
 from collections import defaultdict
+from tqdm import tqdm
 
 
 def find_paths(
@@ -43,15 +45,19 @@ def find_paths(
     # get direct descendants
     desc = nx.descendants_at_distance(G, start, 1)
     valid_desc = [n for n in desc if n not in seen]
-    for n in valid_desc:
-        edge_weight = G[start][n]["weight"]
-        new_weight = current_weight + edge_weight
-        if new_weight >= target_weight:
-            yield tuple(path + [n])
-        else:
-            yield from find_paths(
-                G, n, target_weight, path + [n], seen.union([n]), new_weight
-            )
+    if not valid_desc:
+        # yield stump
+        yield tuple(path)
+    else:
+        for n in valid_desc:
+            edge_weight = G[start][n]["weight"]
+            new_weight = current_weight + edge_weight
+            if new_weight >= target_weight:
+                yield tuple(path + [n])
+            else:
+                yield from find_paths(
+                    G, n, target_weight, path + [n], seen.union([n]), new_weight
+                )
 
 
 def get_random_path(G: nx.Graph, target_weight: float) -> Tuple[int]:
@@ -97,6 +103,32 @@ def find_all_paths(G: nx.Graph, target_weight: float) -> List[Tuple[int]]:
             canonical_paths.append(path)
 
     return list(set(canonical_paths))
+
+
+def get_spanning_paths(G: nx.Graph, target_weight: float) -> List[Tuple[int]]:
+    """
+    Given a trunk skeleton graph, find a set of paths that span all the vertices in the graph
+    Parameters
+    ----------
+    G
+    target_weight
+    Returns
+    -------
+    List[Tuple[int]]:
+    """
+    nodes_remaining = set(G.nodes)
+    paths = []
+    while nodes_remaining:
+        start = np.random.choice(list(nodes_remaining))
+        candidate_paths = list(find_paths(G, start=start, target_weight=target_weight))
+        assert len(candidate_paths) > 0, f"No paths found"
+        candidate_paths.sort(
+            key=lambda path: len(set(path) & nodes_remaining), reverse=True
+        )
+        path = candidate_paths[0]
+        paths.append(path)
+        nodes_remaining -= set(path)
+    return paths
 
 
 def nx_from_skel(skel: Skeleton) -> nx.Graph:
@@ -244,13 +276,15 @@ def vertex_path_to_seed_path(trunk_id, vertex_path, seed_id_to_trunk_seed_id):
     ]
 
 
-def visualize_batch(pc, trunk_skel):
+def visualize_batch(pc, trunk_skel, label):
     # assumes anisotropic
     import open3d as o3d
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pc.astype(float))
-    pcd.paint_uniform_color([0.5, 0.5, 0.5])
+    colors = [[0, 1, 0] if lbl == 1 else [0, 0, 1] for lbl in label]
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    # pcd.paint_uniform_color([0.5, 0.5, 0.5])
 
     pcd_trunk = o3d.geometry.PointCloud()
     pcd_trunk.points = o3d.utility.Vector3dVector(trunk_skel.astype(float))
@@ -273,39 +307,95 @@ def main(conf):
     max_radius: max radius of all skeletons
     """
     if mp.is_remote:
-        mapping = np.load(conf.data.mapping)
+        dataset = FreSegDataset(
+            conf.data.mapping,
+            conf.data.seed,
+            conf.data.pc_zarr,
+            conf.dataloader.path_length,
+            conf.dataloader.num_points,
+            conf.anisotropy,
+        )
+        trunk_id, pc, trunk_pc, label = dataset[0]
+        mp.save((trunk_id, pc, trunk_pc, label))
+    else:
+        trunk_id, pc, trunk_pc, label = mp.load()
+        visualize_batch(pc, trunk_pc, label)
+
+
+class FreSegDataset(Dataset):
+    def __init__(
+        self,
+        mapping_path: str,
+        seed_path: str,
+        pc_zarr_path: str,
+        path_length: float,
+        num_points: int,
+        anisotropy: Tuple[float, float, float],
+    ):
+        self.num_points = num_points
+        self.pc_zarr_path = pc_zarr_path
+        self.anisotropy = anisotropy
+
+        mapping = np.load(mapping_path)
         seg_to_trunk, trunk_to_segs = read_mappings(mapping)
 
-        seed = np.load(conf.data.seed, allow_pickle=True)
+        seed = np.load(seed_path, allow_pickle=True)
         seed_data, skeletons = seed["seed_data"], seed["skeletons"]
 
-        seed_id_to_trunk_seed_id, trunk_seed_id_to_seed_ids = link_seeds(
+        seed_id_to_trunk_seed_id, self.trunk_seed_id_to_seed_ids = link_seeds(
             seed_data, seg_to_trunk, trunk_to_segs
         )
-        skeleton_id_to_seed_id = skel_id_to_seed_id_mapping(seed_data)
+        self.skeleton_id_to_seed_id = skel_id_to_seed_id_mapping(seed_data)
 
         skeletons = skeletons.item()
-        skeletons = {k: nx_from_skel(v) for k, v in skeletons.items()}
+        self.skeletons = {k: nx_from_skel(v) for k, v in skeletons.items()}
+
         trunk_ids = sorted(trunk_to_segs.keys())
+        for k in trunk_ids:
+            components = list(nx.connected_components(self.skeletons[k]))
+            if len(components) > 1:
+                component_sizes = [len(component) for component in components]
+                print(
+                    f"Warning: {k} has {len(components)} connected components with sizes {component_sizes}, taking largest"
+                )
+                self.skeletons[k] = self.skeletons[k].subgraph(max(components, key=len))
 
-        random_trunk_id = np.random.choice(trunk_ids)
+        self.seed_id_to_row = seed_id_to_row_mapping(seed_data)
 
+        self.spanning_paths = {
+            k: get_spanning_paths(self.skeletons[k], path_length) for k in trunk_ids
+        }
+
+    def __len__(self):
+        return sum(len(v) for v in self.spanning_paths.values())
+
+    def get_path_by_idx(self, idx):
+        # given an index, return the trunk_id and path
+
+        for k, v in self.spanning_paths.items():
+            if idx < len(v):
+                return k, v[idx]
+            idx -= len(v)
+        raise IndexError(f"Index {idx} out of range")
+
+    def __getitem__(self, idx):
+        trunk_id, path = self.get_path_by_idx(idx)
         random_path = vertex_path_to_seed_path(
-            random_trunk_id,
-            get_random_path(skeletons[random_trunk_id], conf.dataloader.path_length),
-            skeleton_id_to_seed_id,
+            trunk_id,
+            path,
+            self.skeleton_id_to_seed_id,
         )
 
         # contains ANISOTROPIC coords
-        pc_group = zarr.open_group(conf.data.pc_zarr, mode="r")
+        pc_group = zarr.open_group(self.pc_zarr_path, mode="r")
 
-        seed_id_to_row = seed_id_to_row_mapping(seed_data)
         # NOTE: zyx are in anisotropic coords
         points = sample_path(
-            pc_group, random_path, trunk_seed_id_to_seed_ids, conf.dataloader.num_points
+            pc_group, random_path, self.trunk_seed_id_to_seed_ids, self.num_points
         )
+        assert points.shape[0] == self.num_points
 
-        trunk_points = [seed_id_to_row[seed_id] for seed_id in random_path]
+        trunk_points = [self.seed_id_to_row[seed_id] for seed_id in random_path]
         trunk_pc = np.stack(
             [
                 np.array([point[f"seed_coord_{c}"] for c in "zyx"])
@@ -315,12 +405,11 @@ def main(conf):
         )
 
         pc = np.stack([points["z"], points["y"], points["x"]], axis=1) * np.array(
-            conf.anisotropy
+            self.anisotropy
         )
-        mp.save((pc, trunk_pc))
-    else:
-        pc, trunk_pc = mp.load()
-        visualize_batch(pc, trunk_pc)
+        label = points["seg"] > 0
+
+        return trunk_id, pc, trunk_pc, label
 
 
 from magicpickle import MagicPickle
