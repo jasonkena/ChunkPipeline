@@ -7,9 +7,11 @@ import networkx as nx
 from torch.utils.data import Dataset
 
 from cloudvolume import Skeleton
-from typing import Optional, List, Set, Iterator, Tuple, Dict
+from typing import Optional, List, Set, Iterator, Tuple, Dict, Callable
 from collections import defaultdict
 from tqdm import tqdm
+
+from joblib import Parallel, delayed
 
 
 def find_paths(
@@ -249,28 +251,29 @@ def weighted_random_sample(lengths: List[int], total_samples: int):
     return sample_counts
 
 
-def sample_path(pc_group, trunk_path, trunk_seed_id_to_seed_ids, num_points):
+from tqdm import tqdm
+
+
+def sample_points(pc_group, seed_id, count, length):
+    return pc_group[str(seed_id)][np.random.choice(length, count, replace=True)]
+
+
+def sample_path(pc_lengths, pc_group, seed_path, num_points, num_threads):
     # NOTE: limitation
     # since everything is done via feature transform, if the point cloud of another dendrite is closer to trunk of another, it will be included here
-    seed_ids = []
-    for seed_id in trunk_path:
-        seed_ids.extend(trunk_seed_id_to_seed_ids[seed_id])
-    lengths = [len(pc_group[str(seed_id)]) for seed_id in seed_ids]
+    lengths = [pc_lengths[seed_id] for seed_id in seed_path]
+    assert sum(lengths) > 0
 
     sample_counts = weighted_random_sample(lengths, num_points)
     points = []
-    for i, seed_id in enumerate(seed_ids):
-        points.extend(
-            pc_group[str(seed_id)][
-                np.random.choice(lengths[i], sample_counts[i], replace=True)
-            ]
-        )
-    points = np.stack(points, axis=0)
-
-    return points
+    points = Parallel(n_jobs=num_threads, backend="threading")(
+        delayed(sample_points)(pc_group, seed_id, count, length)
+        for seed_id, count, length in zip(seed_path, sample_counts, lengths)
+    )
+    return np.concatenate(points)
 
 
-def vertex_path_to_seed_path(trunk_id, vertex_path, seed_id_to_trunk_seed_id):
+def vertex_path_to_trunk_path(trunk_id, vertex_path, seed_id_to_trunk_seed_id):
     return [
         seed_id_to_trunk_seed_id[(trunk_id, vertex_id)] for vertex_id in vertex_path
     ]
@@ -299,12 +302,15 @@ class FreSegDataset(Dataset):
         mapping_path: str,
         seed_path: str,
         pc_zarr_path: str,
+        pc_lengths_path: str,
         path_length: float,
         num_points: int,
         anisotropy: Tuple[float, float, float],
         folds: List[List[int]],
         fold: int,
         is_train: bool,
+        num_threads: int,
+        transform: Optional[Callable] = None,
     ):
         """
         Initialize the FreSegDataset object with given parameters and load necessary data.
@@ -328,6 +334,9 @@ class FreSegDataset(Dataset):
         self.num_points = num_points
         self.pc_zarr_path = pc_zarr_path
         self.anisotropy = anisotropy
+        self.transform = transform
+        self.pc_lengths = np.load(pc_lengths_path, allow_pickle=True)["lengths"].item()
+        self.num_threads = num_threads
 
         mapping = np.load(mapping_path)
         seg_to_trunk, trunk_to_segs = read_mappings(mapping)
@@ -335,10 +344,9 @@ class FreSegDataset(Dataset):
         seed = np.load(seed_path, allow_pickle=True)
         seed_data, skeletons = seed["seed_data"], seed["skeletons"]
 
-        seed_id_to_trunk_seed_id, self.trunk_seed_id_to_seed_ids = link_seeds(
+        seed_id_to_trunk_seed_id, trunk_seed_id_to_seed_ids = link_seeds(
             seed_data, seg_to_trunk, trunk_to_segs
         )
-        self.skeleton_id_to_seed_id = skel_id_to_seed_id_mapping(seed_data)
 
         skeletons = skeletons.item()
         self.skeletons = {k: nx_from_skel(v) for k, v in skeletons.items()}
@@ -365,9 +373,36 @@ class FreSegDataset(Dataset):
 
         self.seed_id_to_row = seed_id_to_row_mapping(seed_data)
 
-        self.spanning_paths = {
-            k: get_spanning_paths(self.skeletons[k], path_length) for k in trunk_ids
-        }
+        self.spanning_paths = {}
+
+        skeleton_id_to_seed_id = skel_id_to_seed_id_mapping(seed_data)
+        for trunk_id in trunk_ids:
+            proposed_paths = get_spanning_paths(self.skeletons[trunk_id], path_length)
+            trunk_paths = [
+                vertex_path_to_trunk_path(trunk_id, path, skeleton_id_to_seed_id)
+                for path in proposed_paths
+            ]
+            lengths = []
+            seed_paths = []
+            for path in trunk_paths:
+                seed_paths.append([])
+                for trunk_seed_id in path:
+                    seed_paths[-1].extend(trunk_seed_id_to_seed_ids[trunk_seed_id])
+                lengths.append(
+                    sum([self.pc_lengths[seed_id] for seed_id in seed_paths[-1]])
+                )
+
+            num_empty = sum([length == 0 for length in lengths])
+            if num_empty > 0:
+                print(
+                    f"Warning: {trunk_id} has {num_empty} 0 length paths, skipping these"
+                )
+
+            self.spanning_paths[trunk_id] = [
+                {"seed_path": seed_paths[i], "trunk_path": trunk_paths[i]}
+                for i in range(len(trunk_paths))
+                if lengths[i] > 0
+            ]
 
     def __len__(self):
         return sum(len(v) for v in self.spanning_paths.values())
@@ -382,23 +417,19 @@ class FreSegDataset(Dataset):
         raise IndexError(f"Index {idx} out of range")
 
     def __getitem__(self, idx):
-        trunk_id, path = self.get_path_by_idx(idx)
-        random_path = vertex_path_to_seed_path(
-            trunk_id,
-            path,
-            self.skeleton_id_to_seed_id,
-        )
+        trunk_id, data = self.get_path_by_idx(idx)
+        seed_path, trunk_path = data["seed_path"], data["trunk_path"]
 
         # contains ANISOTROPIC coords
         pc_group = zarr.open_group(self.pc_zarr_path, mode="r")
 
         # NOTE: zyx are in anisotropic coords
         points = sample_path(
-            pc_group, random_path, self.trunk_seed_id_to_seed_ids, self.num_points
+            self.pc_lengths, pc_group, seed_path, self.num_points, self.num_threads
         )
         assert points.shape[0] == self.num_points
 
-        trunk_points = [self.seed_id_to_row[seed_id] for seed_id in random_path]
+        trunk_points = [self.seed_id_to_row[seed_id] for seed_id in trunk_path]
         trunk_pc = np.stack(
             [
                 np.array([point[f"seed_coord_{c}"] for c in "zyx"])
@@ -412,7 +443,10 @@ class FreSegDataset(Dataset):
         )
         label = points["seg"] > 0
 
-        return trunk_id, pc, trunk_pc, label
+        if self.transform is None:
+            return trunk_id, pc, trunk_pc, label
+        else:
+            return self.transform(trunk_id, pc, trunk_pc, label)
 
 
 def main(conf):
@@ -433,23 +467,27 @@ def main(conf):
             conf.data.mapping,
             conf.data.seed,
             conf.data.pc_zarr,
+            conf.data.pc_lengths,
             conf.dataloader.path_length,
             conf.dataloader.num_points,
             conf.anisotropy,
             conf.dataloader.folds,
             fold=0,
             is_train=True,
+            num_threads=conf.dataloader.num_threads,
         )
-        trunk_id, pc, trunk_pc, label = dataset[0]
+        # choose random idx
+        idx = np.random.randint(len(dataset))
+        trunk_id, pc, trunk_pc, label = dataset[idx]
         mp.save((trunk_id, pc, trunk_pc, label))
     else:
         trunk_id, pc, trunk_pc, label = mp.load()
         visualize_batch(pc, trunk_pc, label)
 
 
-from magicpickle import MagicPickle
-
 if __name__ == "__main__":
+    from magicpickle import MagicPickle
+
     np.random.seed(42)
     with MagicPickle("think-jason") as mp:
         if mp.is_remote:

@@ -91,6 +91,7 @@ data:
   feature_zarr_sync: ${output_dir}/${name}/feature.sync
   pc_zarr: ${output_dir}/${name}/pc.zarr
   pc_zarr_sync: ${output_dir}/${name}/pc_sync.zarr
+  pc_lengths: ${output_dir}/${name}/pc_lengths.npz
 
 # import numpy as np
 # np.random.seed(0)

@@ -159,11 +159,15 @@ def to_point_cloud(conf):
             total=len(chunks),
         )
     )
+    lengths = {}
     total_gt = sum(res)
     total_pred = 0
     for seed_id in tqdm(seed_ids, desc="Verifying"):
-        total_pred += len(group[seed_id])
+        lengths[seed_id] = len(group[seed_id])
+        total_pred += lengths[seed_id]
     assert total_gt == total_pred, "Parallel append bug"
+
+    np.savez(conf.data.pc_lengths, lengths=lengths)
 
 
 if __name__ == "__main__":
