@@ -117,3 +117,7 @@ dataloader_mouse:
 
 dataloader_seg_den:
     python dataloader.py -c configs/base.yaml -c configs/seg_den.yaml
+
+cache_dataset:
+    python cache_dataloader.py --fold 0 --pathlength 10000 --npoints 4096 --output_dir /data/adhinart/dendrite/scripts/igneous/outputs/seg_den
+
