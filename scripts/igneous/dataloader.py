@@ -142,7 +142,13 @@ def get_spanning_paths(G: nx.Graph, target_weight: float) -> List[Tuple[int]]:
         path = candidate_paths[0]
         paths.append(path)
         nodes_remaining -= set(path)
+    num_vertices = [len(path) for path in paths]
+    print(f"Found {len(paths)} paths with {num_vertices} vertices")
     return paths
+
+
+def get_spanning_paths_new(G: nx.Graph, target_weight: float) -> List[Tuple[int]]:
+    pass
 
 
 def nx_from_skel(skel: Skeleton) -> nx.Graph:
@@ -395,6 +401,7 @@ class FreSegDataset(Dataset):
                 for path in proposed_paths
             ]
             lengths = []
+            geodesic_lengths = []
             seed_paths = []
             for path in trunk_paths:
                 seed_paths.append([])
@@ -402,6 +409,11 @@ class FreSegDataset(Dataset):
                     seed_paths[-1].extend(trunk_seed_id_to_seed_ids[trunk_seed_id])
                 lengths.append(
                     sum([self.pc_lengths[seed_id] for seed_id in seed_paths[-1]])
+                )
+                trunk_pc = self.load_trunk_pc(path)
+                print(f"Trunk {trunk_id} has {len(trunk_pc)} points")
+                geodesic_lengths.append(
+                    np.sum(np.linalg.norm(np.diff(trunk_pc, axis=0), axis=1))
                 )
 
             num_empty = sum([length == 0 for length in lengths])
@@ -411,10 +423,21 @@ class FreSegDataset(Dataset):
                 )
 
             self.spanning_paths[trunk_id] = [
-                {"seed_path": seed_paths[i], "trunk_path": trunk_paths[i]}
+                {
+                    "seed_path": seed_paths[i],
+                    "trunk_path": trunk_paths[i],
+                    "geodesic_length": geodesic_lengths[i],
+                }
                 for i in range(len(trunk_paths))
                 if lengths[i] > 0
             ]
+        # print sorted geodesic_lengths across all paths
+        all_geodesic_lengths = []
+        for k, v in self.spanning_paths.items():
+            for path in v:
+                all_geodesic_lengths.append(path["geodesic_length"])
+        all_geodesic_lengths = sorted(all_geodesic_lengths)
+        print(f"Geodesic lengths: {all_geodesic_lengths}")
 
     def __len__(self):
         return sum(len(v) for v in self.spanning_paths.values())
@@ -427,6 +450,16 @@ class FreSegDataset(Dataset):
                 return k, v[idx]
             idx -= len(v)
         raise IndexError(f"Index {idx} out of range")
+
+    def load_trunk_pc(self, trunk_path):
+        trunk_points = [self.seed_id_to_row[seed_id] for seed_id in trunk_path]
+        return np.stack(
+            [
+                np.array([point[f"seed_coord_{c}"] for c in "zyx"])
+                for point in trunk_points
+            ],
+            axis=0,
+        )
 
     def __getitem__(self, idx):
         trunk_id, data = self.get_path_by_idx(idx)
@@ -488,6 +521,7 @@ def main(conf):
             is_train=True,
             num_threads=conf.dataloader.num_threads,
         )
+        print(len(dataset))
         # choose random idx
         idx = np.random.randint(len(dataset))
         trunk_id, pc, trunk_pc, label = dataset[idx]
