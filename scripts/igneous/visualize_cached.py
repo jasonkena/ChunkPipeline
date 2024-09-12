@@ -8,7 +8,16 @@ if __name__ == "__main__":
     with MagicPickle("think-jason") as mp:
         if mp.is_remote:
             dataset = CachedDataset(
-                "/data/adhinart/dendrite/scripts/igneous/outputs/seg_den/dataset_0_10000.0_4096"
+                "/data/adhinart/dendrite/scripts/igneous/outputs/seg_den/dataset_0_10000_30000_old",
+                folds=[
+                    [3, 5, 11, 12, 23, 28, 29, 32, 39, 42],
+                    [8, 15, 19, 27, 30, 34, 35, 36, 46, 49],
+                    [9, 14, 16, 17, 21, 26, 31, 33, 43, 44],
+                    [2, 6, 7, 13, 18, 24, 25, 38, 41, 50],
+                    [1, 4, 10, 20, 22, 37, 40, 45, 47, 48],
+                ],
+                fold=0,
+                is_train=False,
             )
             data = [dataset[i] for i in range(len(dataset))]
             mp.save(data)

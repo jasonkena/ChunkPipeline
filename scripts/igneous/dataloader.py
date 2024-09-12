@@ -326,6 +326,9 @@ class FreSegDataset(Dataset):
     ):
         """
         Initialize the FreSegDataset object with given parameters and load necessary data.
+        if fold is -1, use all data
+
+
         Parameters
         ----------
         mapping_path : str
@@ -341,7 +344,7 @@ class FreSegDataset(Dataset):
         is_train : bool
             used to determine which folds to use
         """
-        assert 0 <= fold < len(folds)
+        assert -1 <= fold < len(folds)
 
         self.num_points = num_points
         self.pc_zarr_path = pc_zarr_path
@@ -363,17 +366,20 @@ class FreSegDataset(Dataset):
         skeletons = skeletons.item()
         self.skeletons = {k: nx_from_skel(v) for k, v in skeletons.items()}
 
-        if is_train:
-            trunk_ids = [
-                item
-                for idx, sublist in enumerate(folds)
-                if idx != fold
-                for item in sublist
-            ]
+        if fold == -1:
+            trunk_ids = list(trunk_to_segs.keys())
         else:
-            trunk_ids = folds[fold]
+            if is_train:
+                trunk_ids = [
+                    item
+                    for idx, sublist in enumerate(folds)
+                    if idx != fold
+                    for item in sublist
+                ]
+            else:
+                trunk_ids = folds[fold]
 
-        trunk_ids = sorted(trunk_to_segs.keys())
+        trunk_ids = sorted(trunk_ids)
         for k in trunk_ids:
             components = list(nx.connected_components(self.skeletons[k]))
             if len(components) > 1:

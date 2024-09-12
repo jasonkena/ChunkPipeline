@@ -5,6 +5,7 @@ import contextlib
 from dataloader import FreSegDataset
 from tqdm import tqdm
 from joblib import Parallel, delayed
+from typing import List, Optional, Callable
 
 import argparse
 
@@ -28,7 +29,7 @@ def get_dataset(
     seed: int,
     num_threads: int,
 ):
-    assert fold in [0, 1, 2, 3, 4]
+    assert fold == -1
 
     with temp_seed(seed):
         dataset = FreSegDataset(
@@ -77,6 +78,10 @@ def cache_dataset(
     num_threads: int,
 ):
     dataset = get_dataset(path_length, num_points, fold, is_train, seed, num_threads)
+    np.savez(
+        os.path.join(output_dir, "spanning_paths.npz"),
+        spanning_paths=dataset.spanning_paths,
+    )
 
     results = list(
         tqdm(
@@ -93,23 +98,67 @@ def cache_dataset(
 
 
 class CachedDataset:
-    def __init__(self, output_path: str):
-        self.output_path = output_path
-        files = os.listdir(output_path)
-        self.files = sorted(files, key=lambda x: int(x.split(".")[0]))
+    def __init__(
+        self,
+        output_path: str,
+        folds: List[List[int]],
+        fold: int,
+        is_train: bool,
+        transform: Optional[Callable] = None,
+    ):
+        self.transform = transform
+        self.spanning_paths = np.load(
+            os.path.join(output_path, "spanning_paths.npz"), allow_pickle=True
+        )["spanning_paths"].item()
+
+        if fold == -1:
+            print("Loading all folds, ignoring is_train")
+            trunk_ids = self.spanning_paths.keys()
+        else:
+            if is_train:
+                trunk_ids = [
+                    item
+                    for idx, sublist in enumerate(folds)
+                    if idx != fold
+                    for item in sublist
+                ]
+            else:
+                trunk_ids = folds[fold]
+        self.trunk_ids = sorted(trunk_ids)
+
+        files = []
+        i = 0
+        for id in sorted(self.spanning_paths.keys()):
+            for path in self.spanning_paths[id]:
+                if id in self.trunk_ids:
+                    files.append(os.path.join(output_path, f"{i}.npz"))
+                    assert os.path.exists(files[-1])
+                i += 1
+        self.files = files
 
     def __len__(self):
         return len(self.files)
 
     def __getitem__(self, idx):
-        data = np.load(os.path.join(self.output_path, self.files[idx]))
-        return data["trunk_id"], data["pc"], data["trunk_pc"], data["label"]
+        data = np.load(self.files[idx])
+        trunk_id, pc, trunk_pc, label = (
+            data["trunk_id"],
+            data["pc"],
+            data["trunk_pc"],
+            data["label"],
+        )
+        assert trunk_id in self.trunk_ids
+
+        if self.transform is None:
+            return trunk_id, pc, trunk_pc, label
+        else:
+            return self.transform(trunk_id, pc, trunk_pc, label)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fold", type=int, required=True, help="Fold number")
-    parser.add_argument("--pathlength", type=float, required=True, help="Path length")
+    parser.add_argument("--pathlength", type=int, required=True, help="Path length")
     parser.add_argument("--npoints", type=int, required=True, help="Number of points")
     parser.add_argument("--n_jobs", type=int, default=64, help="Number of jobs")
     # parser.add_argument("--n_jobs", type=int, default=8, help="Number of jobs")
@@ -137,4 +186,6 @@ if __name__ == "__main__":
         n_jobs=args.n_jobs,
         num_threads=args.num_threads,
     )
-# python cache_dataloader.py --fold 0 --pathlength 10000 --npoints 4096 --output_dir /data/adhinart/dendrite/scripts/igneous/outputs/seg_den
+
+
+# python cache_dataloader.py --fold -1 --pathlength 10000 --npoints 4096 --output_dir /data/adhinart/dendrite/scripts/igneous/outputs/seg_den
