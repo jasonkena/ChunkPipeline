@@ -121,7 +121,19 @@ def get_spanning_paths(G: nx.Graph, target_weight: float) -> List[Tuple[int]]:
     nodes_remaining = set(G.nodes)
     paths = []
     while nodes_remaining:
-        start = np.random.choice(list(nodes_remaining))
+        # Calculate degree for each node in nodes_remaining
+        degree_dict = {
+            node: sum(
+                1 for neighbor in G.neighbors(node) if neighbor in nodes_remaining
+            )
+            for node in nodes_remaining
+        }
+        min_degree = min(degree_dict.values())
+        min_degree_nodes = [
+            node for node, degree in degree_dict.items() if degree == min_degree
+        ]
+
+        start = np.random.choice(min_degree_nodes)
         candidate_paths = list(find_paths(G, start=start, target_weight=target_weight))
         assert len(candidate_paths) > 0, f"No paths found"
         candidate_paths.sort(
