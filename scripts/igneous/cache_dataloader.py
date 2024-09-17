@@ -147,7 +147,9 @@ class CachedDataset:
         assert trunk_id in self.trunk_ids
 
         # PC is [N, 3], downsample to [num_points, 3]
-        pc = np.random.permutation(pc)[: self.num_points]
+        random_permutation = np.random.permutation(pc.shape[0])
+        pc = pc[random_permutation[: self.num_points]]
+        label = label[random_permutation[: self.num_points]]
 
         if self.transform is None:
             return trunk_id, pc, trunk_pc, label
