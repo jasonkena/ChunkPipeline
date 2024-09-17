@@ -459,7 +459,7 @@ class FreSegDataset(Dataset):
         pc = np.stack([points["z"], points["y"], points["x"]], axis=1) * np.array(
             self.anisotropy
         )
-        label = points["seg"] > 0
+        label = points["seg"]
 
         if self.transform is None:
             return trunk_id, pc, trunk_pc, label

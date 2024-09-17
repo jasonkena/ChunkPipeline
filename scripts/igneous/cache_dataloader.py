@@ -7,7 +7,7 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 from typing import List, Optional, Callable
 
-import argparse
+from utils import get_conf
 
 
 @contextlib.contextmanager
@@ -24,12 +24,9 @@ def temp_seed(seed):
 def get_dataset(
     path_length: float,
     num_points: int,
-    fold: int,
-    is_train: bool,
     seed: int,
     num_threads: int,
 ):
-    assert fold == -1
 
     with temp_seed(seed):
         dataset = FreSegDataset(
@@ -47,8 +44,8 @@ def get_dataset(
                 [2, 6, 7, 13, 18, 24, 25, 38, 41, 50],
                 [1, 4, 10, 20, 22, 37, 40, 45, 47, 48],
             ],
-            fold=fold,
-            is_train=is_train,
+            fold=-1,
+            is_train=True, # ignored
             transform=None,
             num_threads=num_threads,
         )
@@ -71,13 +68,11 @@ def cache_dataset(
     output_dir: str,
     path_length: float,
     num_points: int,
-    fold: int,
-    is_train: bool,
     seed: int,
     n_jobs: int,
     num_threads: int,
 ):
-    dataset = get_dataset(path_length, num_points, fold, is_train, seed, num_threads)
+    dataset = get_dataset(path_length, num_points, seed, num_threads)
     np.savez(
         os.path.join(output_dir, "spanning_paths.npz"),
         spanning_paths=dataset.spanning_paths,
@@ -101,11 +96,13 @@ class CachedDataset:
     def __init__(
         self,
         output_path: str,
+        num_points: int,
         folds: List[List[int]],
         fold: int,
         is_train: bool,
         transform: Optional[Callable] = None,
     ):
+        self.num_points = num_points
         self.transform = transform
         self.spanning_paths = np.load(
             os.path.join(output_path, "spanning_paths.npz"), allow_pickle=True
@@ -149,6 +146,9 @@ class CachedDataset:
         )
         assert trunk_id in self.trunk_ids
 
+        # PC is [N, 3], downsample to [num_points, 3]
+        pc = np.random.permutation(pc)[: self.num_points]
+
         if self.transform is None:
             return trunk_id, pc, trunk_pc, label
         else:
@@ -156,36 +156,17 @@ class CachedDataset:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--fold", type=int, required=True, help="Fold number")
-    parser.add_argument("--pathlength", type=int, required=True, help="Path length")
-    parser.add_argument("--npoints", type=int, required=True, help="Number of points")
-    parser.add_argument("--n_jobs", type=int, default=64, help="Number of jobs")
-    # parser.add_argument("--n_jobs", type=int, default=8, help="Number of jobs")
-    parser.add_argument("--num_threads", type=int, default=4, help="Number of threads")
-    parser.add_argument(
-        "--output_dir", type=str, required=True, help="Output directory"
-    )
+    conf = get_conf()
+    for configuration in conf.dataloader.cached:
+        print(f"Caching dataset for {configuration}")
+        if not os.path.exists(configuration.output_dir):
+            os.makedirs(configuration.output_dir)
 
-    args = parser.parse_args()
-
-    output_dir = os.path.join(
-        args.output_dir, f"dataset_{args.fold}_{args.pathlength}_{args.npoints}"
-    )
-    print(f"Output path: {output_dir}")
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    cache_dataset(
-        output_dir=output_dir,
-        path_length=args.pathlength,
-        num_points=args.npoints,
-        fold=args.fold,
-        is_train=True,  # Assuming a default value for is_train
-        seed=0,  # Assuming a default value for seed
-        n_jobs=args.n_jobs,
-        num_threads=args.num_threads,
-    )
-
-
-# python cache_dataloader.py --fold -1 --pathlength 10000 --npoints 4096 --output_dir /data/adhinart/dendrite/scripts/igneous/outputs/seg_den
+        cache_dataset(
+            output_dir=configuration.output_dir,
+            path_length=configuration.path_length,
+            num_points=configuration.num_points,
+            seed=0, # Assuming a default value for seed
+            n_jobs=conf.n_jobs_cache,
+            num_threads=conf.n_threads_cache
+        )
