@@ -16,6 +16,7 @@ def get_dataset(
     pc_lengths_path: str,
     path_length: float,
     num_points: int,
+    anisotropy: List[int],
     seed: int,
     num_threads: int,
 ):
@@ -27,7 +28,7 @@ def get_dataset(
             pc_lengths_path=pc_lengths_path,
             path_length=path_length,
             num_points=num_points,
-            anisotropy=[30, 6, 6],
+            anisotropy=anisotropy,
             folds=[
                 [3, 5, 11, 12, 23, 28, 29, 32, 39, 42],
                 [8, 15, 19, 27, 30, 34, 35, 36, 46, 49],
@@ -63,6 +64,7 @@ def cache_dataset(
     output_dir: str,
     path_length: float,
     num_points: int,
+    anisotropy: List[int],
     seed: int,
     n_jobs: int,
     num_threads: int,
@@ -74,6 +76,7 @@ def cache_dataset(
         pc_lengths_path,
         path_length,
         num_points,
+        anisotropy,
         seed,
         num_threads,
     )
@@ -176,6 +179,7 @@ if __name__ == "__main__":
             output_dir=configuration.output_dir,
             path_length=configuration.path_length,
             num_points=configuration.num_points,
+            anisotropy=conf.anisotropy,
             seed=0,  # Assuming a default value for seed
             n_jobs=conf.n_jobs_cache,
             num_threads=conf.n_threads_cache,

@@ -513,8 +513,8 @@ def main(conf):
                 num_threads=conf.dataloader.num_threads,
             )
         # choose random idx
-        idx = 72
-        # idx = np.random.randint(len(dataset))
+        # idx = 72
+        idx = np.random.randint(len(dataset))
         trunk_id, pc, trunk_pc, label = dataset[idx]
         skeleton = np.load(conf.data.seed, allow_pickle=True)["skeletons"].item()[
             trunk_id
