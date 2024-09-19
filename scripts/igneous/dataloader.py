@@ -5,6 +5,7 @@ from visualize import read_mappings
 from scipy.spatial import KDTree
 import networkx as nx
 from torch.utils.data import Dataset
+import contextlib
 
 from cloudvolume import Skeleton
 from typing import Optional, List, Set, Iterator, Tuple, Dict, Callable
@@ -12,6 +13,20 @@ from collections import defaultdict
 from tqdm import tqdm
 
 from joblib import Parallel, delayed
+import sys
+
+sys.setrecursionlimit(10**6)
+
+
+@contextlib.contextmanager
+def temp_seed(seed):
+    # https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
 
 
 def find_paths(
@@ -295,6 +310,8 @@ def visualize_batch(pc, trunk_skel, label):
     # assumes anisotropic
     import open3d as o3d
 
+    label = label > 0
+
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pc.astype(float))
     colors = [[0, 1, 0] if lbl == 1 else [0, 0, 1] for lbl in label]
@@ -481,25 +498,31 @@ def main(conf):
     max_radius: max radius of all skeletons
     """
     if mp.is_remote:
-        dataset = FreSegDataset(
-            conf.data.mapping,
-            conf.data.seed,
-            conf.data.pc_zarr,
-            conf.data.pc_lengths,
-            conf.dataloader.path_length,
-            conf.dataloader.num_points,
-            conf.anisotropy,
-            conf.dataloader.folds,
-            fold=0,
-            is_train=True,
-            num_threads=conf.dataloader.num_threads,
-        )
+        with temp_seed(0):
+            dataset = FreSegDataset(
+                conf.data.mapping,
+                conf.data.seed,
+                conf.data.pc_zarr,
+                conf.data.pc_lengths,
+                conf.dataloader.path_length,
+                conf.dataloader.num_points,
+                conf.anisotropy,
+                conf.dataloader.folds,
+                fold=-1,
+                is_train=True,
+                num_threads=conf.dataloader.num_threads,
+            )
         # choose random idx
-        idx = np.random.randint(len(dataset))
+        idx = 72
+        # idx = np.random.randint(len(dataset))
         trunk_id, pc, trunk_pc, label = dataset[idx]
-        mp.save((trunk_id, pc, trunk_pc, label))
+        skeleton = np.load(conf.data.seed, allow_pickle=True)["skeletons"].item()[
+            trunk_id
+        ]
+        mp.save((trunk_id, pc, trunk_pc, label, skeleton))
     else:
-        trunk_id, pc, trunk_pc, label = mp.load()
+        trunk_id, pc, trunk_pc, label, skeleton = mp.load()
+        trunk_pc = skeleton.vertices
         visualize_batch(pc, trunk_pc, label)
 
 

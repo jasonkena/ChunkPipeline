@@ -19,3 +19,14 @@ data:
   pc_zarr: ${output_dir}/${name}/pc.zarr
   pc_zarr_sync: ${output_dir}/${name}/pc_sync.zarr
   pc_lengths: ${output_dir}/${name}/pc_lengths.npz
+
+dataloader:
+  folds:
+    - [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  cached:
+    - num_points: 1000000
+      path_length: 10000
+      output_dir: ${output_dir}/${name}/dataset_${dataloader.cached[0].num_points}_${dataloader.cached[0].path_length}
+    - num_points: 1000000
+      path_length: 20000
+      output_dir: ${output_dir}/${name}/dataset_${dataloader.cached[1].num_points}_${dataloader.cached[1].path_length}

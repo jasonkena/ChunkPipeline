@@ -1,8 +1,7 @@
 import os
 import numpy as np
-import contextlib
 
-from dataloader import FreSegDataset
+from dataloader import FreSegDataset, temp_seed
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from typing import List, Optional, Callable
@@ -10,30 +9,22 @@ from typing import List, Optional, Callable
 from utils import get_conf
 
 
-@contextlib.contextmanager
-def temp_seed(seed):
-    # https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
-    state = np.random.get_state()
-    np.random.seed(seed)
-    try:
-        yield
-    finally:
-        np.random.set_state(state)
-
-
 def get_dataset(
+    mapping_path: str,
+    seed_path: str,
+    pc_zarr_path: str,
+    pc_lengths_path: str,
     path_length: float,
     num_points: int,
     seed: int,
     num_threads: int,
 ):
-
     with temp_seed(seed):
         dataset = FreSegDataset(
-            mapping_path="/data/adhinart/dendrite/scripts/igneous/outputs/seg_den/mapping.npy",
-            seed_path="/data/adhinart/dendrite/scripts/igneous/outputs/seg_den/seed.npz",
-            pc_zarr_path="/data/adhinart/dendrite/scripts/igneous/outputs/seg_den/pc.zarr",
-            pc_lengths_path="/data/adhinart/dendrite/scripts/igneous/outputs/seg_den/pc_lengths.npz",
+            mapping_path=mapping_path,
+            seed_path=seed_path,
+            pc_zarr_path=pc_zarr_path,
+            pc_lengths_path=pc_lengths_path,
             path_length=path_length,
             num_points=num_points,
             anisotropy=[30, 6, 6],
@@ -45,7 +36,7 @@ def get_dataset(
                 [1, 4, 10, 20, 22, 37, 40, 45, 47, 48],
             ],
             fold=-1,
-            is_train=True, # ignored
+            is_train=True,  # ignored
             transform=None,
             num_threads=num_threads,
         )
@@ -65,6 +56,10 @@ def store_sample(dataset, i, output_dir):
 
 
 def cache_dataset(
+    mapping_path: str,
+    seed_path: str,
+    pc_zarr_path: str,
+    pc_lengths_path: str,
     output_dir: str,
     path_length: float,
     num_points: int,
@@ -72,7 +67,16 @@ def cache_dataset(
     n_jobs: int,
     num_threads: int,
 ):
-    dataset = get_dataset(path_length, num_points, seed, num_threads)
+    dataset = get_dataset(
+        mapping_path,
+        seed_path,
+        pc_zarr_path,
+        pc_lengths_path,
+        path_length,
+        num_points,
+        seed,
+        num_threads,
+    )
     np.savez(
         os.path.join(output_dir, "spanning_paths.npz"),
         spanning_paths=dataset.spanning_paths,
@@ -165,10 +169,14 @@ if __name__ == "__main__":
             os.makedirs(configuration.output_dir)
 
         cache_dataset(
+            mapping_path=conf.data.mapping,
+            seed_path=conf.data.seed,
+            pc_zarr_path=conf.data.pc_zarr,
+            pc_lengths_path=conf.data.pc_lengths,
             output_dir=configuration.output_dir,
             path_length=configuration.path_length,
             num_points=configuration.num_points,
-            seed=0, # Assuming a default value for seed
+            seed=0,  # Assuming a default value for seed
             n_jobs=conf.n_jobs_cache,
-            num_threads=conf.n_threads_cache
+            num_threads=conf.n_threads_cache,
         )

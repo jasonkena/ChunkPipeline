@@ -92,6 +92,6 @@ point_cloud:
   chunk_size: 4096
 
 dataloader:
-  path_length: 10000
+  path_length: 20000
   num_points: 30000
   num_threads: 8

@@ -121,5 +121,11 @@ dataloader_seg_den:
 cache_seg_den:
     python cache_dataloader.py -c configs/base.yaml -c configs/seg_den.yaml
 
+cache_mouse:
+    python cache_dataloader.py -c configs/base.yaml -c configs/mouse.yaml
+
+cache_human:
+    python cache_dataloader.py -c configs/base.yaml -c configs/human.yaml
+
 visualize_cached:
     python visualize_cached.py
