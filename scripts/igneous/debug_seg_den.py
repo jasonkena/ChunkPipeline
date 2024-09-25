@@ -12,14 +12,18 @@ there are like 300 unique segments in the mapping returned by to_precomputed out
 """
 
 
-def get_unique_chunk(chunk, raw, raw_key, spine, spine_key, seg, seg_key):
+def get_unique_chunk(
+    chunk, raw, raw_key, spine, spine_key, seg, seg_key, new_branches, new_branches_key
+):
     raw_chunk = h5py.File(raw, "r")[raw_key][chunk]
     spine_chunk = h5py.File(spine, "r")[spine_key][chunk]
     seg_chunk = h5py.File(seg, "r")[seg_key][chunk]
+    new_branches_chunk = h5py.File(new_branches, "r")[new_branches_key][chunk]
 
     raw_unique = np.unique(raw_chunk)
     spine_unique = np.unique(spine_chunk)
     seg_unique = np.unique(seg_chunk)
+    new_branches_unique = np.unique(new_branches_chunk)
 
     num_contradict = np.sum((spine_chunk > 0) != (seg_chunk > 0))
 
@@ -28,6 +32,7 @@ def get_unique_chunk(chunk, raw, raw_key, spine, spine_key, seg, seg_key):
         "spine": spine_unique,
         "seg": seg_unique,
         "num_contradict": num_contradict,
+        "new_branches": new_branches_unique,
     }
 
     return res
@@ -47,6 +52,8 @@ def main(conf):
                     conf.data.broken_spine_key,
                     conf.data.broken_seg,
                     conf.data.broken_seg_key,
+                    conf.data.broken_16_new_branches,
+                    conf.data.broken_16_new_branches_key,
                 )
                 for c in chunks
             ),
@@ -59,16 +66,19 @@ def main(conf):
         "raw": set(),
         "spine": set(),
         "seg": set(),
+        "new_branches": set(),
         "num_contradict": 0,
     }
     for r in res:
         merged_res["raw"].update(r["raw"])
         merged_res["spine"].update(r["spine"])
         merged_res["seg"].update(r["seg"])
+        merged_res["new_branches"].update(r["new_branches"])
         merged_res["num_contradict"] += r["num_contradict"]
     merged_res["raw"] = np.array(sorted(merged_res["raw"]))
     merged_res["spine"] = np.array(sorted(merged_res["spine"]))
     merged_res["seg"] = np.array(sorted(merged_res["seg"]))
+    merged_res["new_branches"] = np.array(sorted(merged_res["new_branches"]))
 
     np.savez(conf.data.broken_debug, merged_res=merged_res)
 

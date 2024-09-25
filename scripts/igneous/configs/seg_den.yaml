@@ -73,6 +73,8 @@ data:
   broken_spine_key: "main"
   broken_seg: ${_base_dir}/raw/${name}_seg.h5
   broken_seg_key: "main"
+  broken_16_new_branches: ${_base_dir}/raw/seg_d5_6nm.h5
+  broken_16_new_branches_key: "main"
 
   raw: ${_base_dir}/raw/${name}_raw_fixed.h5
   raw_key: "main"

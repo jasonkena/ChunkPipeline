@@ -21,11 +21,11 @@ downsample:
     - [2, 2, 2]
     - [2, 2, 2]
 
-    # teasar_params is a list of either one dict
-    # has to be a list so omegaconf can merge
-    # teasar_params:
-    - mip: 0
-      scale: ...
+  # teasar_params is a list of either one dict
+  # has to be a list so omegaconf can merge
+  # teasar_params:
+  # - mip: 0
+  #   scale: ...
 #     const: ...
 #
 # or multiple elements, but ids must be specified for each
