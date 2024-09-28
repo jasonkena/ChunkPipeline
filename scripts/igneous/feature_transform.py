@@ -106,6 +106,7 @@ def feature_transform(conf):
         vertex_ids.append(np.arange(len(skeleton.vertices)))
         seed_coords.append(skeleton.vertices)
         max_radius = max(max_radius, np.max(skeleton.radii))
+    print(f"max radius: {max_radius}")
     skeleton_ids = np.concatenate(skeleton_ids)
     vertex_ids = np.concatenate(vertex_ids)
     seed_coords = np.concatenate(seed_coords)

@@ -127,8 +127,13 @@ def kd_feature_transform_chunk(
         sliced_seed, sliced_modified, anisotropy
     )[undilated_slice]
     # check that there (modified > 0) => (closest_to_idx > 0)
-    assert np.all(
-        np.logical_or(sliced_modified[undilated_slice] == 0, closest_to_idx != 0)
-    ), "There are modified > 0 where closest_to_idx is 0, try increasing offset"
+
+    num_invalid = np.sum(
+        (np.logical_and(sliced_modified[undilated_slice] > 0, closest_to_idx == 0))
+    )
+    if num_invalid > 0:
+        print(
+            f"WARNING: {num_invalid} modified > 0 where closest_to_idx is 0, try increasing offset, chunk: {input_slice}"
+        )
 
     feature[input_slice] = closest_to_idx

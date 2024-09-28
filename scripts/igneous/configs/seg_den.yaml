@@ -18,7 +18,6 @@ skeletonize_trunk:
           13,
           14,
           15,
-          16,
           17,
           19,
           20,
@@ -49,7 +48,7 @@ skeletonize_trunk:
       mip: 4
       const: 10000
       scale: 1.5
-    - ids: [7, 10, 18, 25, 31, 36, 49]
+    - ids: [7, 10, 18, 25, 31, 36, 49, 16]
       mip: 4
       const: 5000
       scale: 1.5

@@ -85,6 +85,7 @@ touching_centroids:
   connectivity: 6
 
 feature_transform:
+  # radii_multiplier: 8.0
   radii_multiplier: 4.0
   # radii_multiplier: 2.0
 
