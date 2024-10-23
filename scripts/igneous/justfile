@@ -68,8 +68,14 @@ viewer_seg_den:
 debug_seg_den:
     python debug_seg_den.py -c configs/base.yaml -c configs/seg_den.yaml
 
+debug_human:
+    python debug_human.py -c configs/base.yaml -c configs/human.yaml
+
 fix_seg_den:
     python fix_seg_den.py -c configs/base.yaml -c configs/seg_den.yaml
+
+fix_human:
+    python fix_human.py -c configs/base.yaml -c configs/human.yaml
 
 # used to extract unsharded skeletons from cloudvolume
 visualize_human:

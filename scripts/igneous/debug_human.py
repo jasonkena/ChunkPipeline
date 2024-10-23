@@ -1,10 +1,12 @@
+import os
+import glob
 import numpy as np
 from joblib import Parallel, delayed
 import h5py
 from to_precomputed import get_chunks
 from tqdm import tqdm
 from utils import get_conf
-from collections import defaultdict
+import imageio
 
 """
 just used to debug seg_den_seg
@@ -13,40 +15,61 @@ there are like 300 unique segments in the mapping returned by to_precomputed out
 """
 
 
-def get_unique_chunk(chunk, raw, raw_key, spine, spine_key, seg, seg_key, new_branches):
+def get_unique_chunk(
+    chunk, raw, raw_key, spine, spine_key, seg, seg_key, new_trunk, new_trunk_key
+):
     raw_chunk = h5py.File(raw, "r")[raw_key][chunk]
     spine_chunk = h5py.File(spine, "r")[spine_key][chunk]
     seg_chunk = h5py.File(seg, "r")[seg_key][chunk]
-
-    new_branch_trunk_ids = [x["trunk_id"] for x in new_branches]
-    new_branches_chunks = [
-        h5py.File(x["file"], "r")[x["key"]][chunk] for x in new_branches
-    ]
+    new_trunk_chunk = h5py.File(new_trunk, "r")[new_trunk_key][chunk]
 
     raw_unique = np.unique(raw_chunk)
     spine_unique = np.unique(spine_chunk)
     seg_unique = np.unique(seg_chunk)
-    new_branches_unique = [np.unique(x) for x in new_branches_chunks]
+    new_trunk_unique = np.unique(new_trunk_chunk)
 
-    num_contradict = np.sum((spine_chunk > 0) != (seg_chunk > 0))
+    num_contradict_spine_seg = np.sum((spine_chunk > 0) != (seg_chunk > 0))
+    num_contradict_new_trunk_raw = np.sum((new_trunk_chunk > 0) & (raw_chunk > 0))
 
     res = {
         "raw": raw_unique,
         "spine": spine_unique,
         "seg": seg_unique,
-        "num_contradict": num_contradict,
-        # make it dict {trunk_id: unique}
-        "new_branches": {
-            k: v for k, v in zip(new_branch_trunk_ids, new_branches_unique)
-        },
+        "num_contradict_spine_seg": num_contradict_spine_seg,
+        "num_contradict_new_trunk_raw": num_contradict_new_trunk_raw,
+        "new_trunk": new_trunk_unique,
     }
 
     return res
 
 
+def generate_10_png_vol(dir: str, output: str, output_key: str):
+    files = sorted(glob.glob(os.path.join(dir, "*.png")))
+    imgs = list(
+        tqdm(
+            Parallel(n_jobs=conf.n_jobs_debug, return_as="generator")(
+                delayed(imageio.imread)(f) for f in files
+            ),
+            total=len(files),
+            leave=False,
+        )
+    )
+    new_seg = np.stack(imgs, axis=0).astype(np.uint16)
+
+    file = h5py.File(output, "w")
+    file.create_dataset(output_key, data=new_seg)
+
+
 def main(conf):
+    generate_10_png_vol(
+        conf.data.broken_10_png_dir,
+        conf.data.broken_10_png_vol,
+        conf.data.broken_10_png_vol_key,
+    )
+
     seg_file = h5py.File(conf.data.broken_seg, "r")[conf.data.seg_key]
-    chunks = get_chunks(tuple(seg_file.shape) + (1,), tuple(seg_file.chunks))
+    # NOTE: overriding chunks
+    chunks = get_chunks(tuple(seg_file.shape) + (1,), (256, 512, 512))
     res = list(
         tqdm(
             Parallel(n_jobs=conf.n_jobs_debug, return_as="generator")(
@@ -58,8 +81,8 @@ def main(conf):
                     conf.data.broken_spine_key,
                     conf.data.broken_seg,
                     conf.data.broken_seg_key,
-                    # list of dicts {trunk_id: int, file: str, key: str}
-                    conf.data.broken_new_branches,
+                    conf.data.broken_10_png_vol,
+                    conf.data.broken_10_png_vol_key,
                 )
                 for c in chunks
             ),
@@ -72,22 +95,21 @@ def main(conf):
         "raw": set(),
         "spine": set(),
         "seg": set(),
-        "new_branches": defaultdict(set),
-        "num_contradict": 0,
+        "new_trunk": set(),
+        "num_contradict_spine_seg": 0,
+        "num_contradict_new_trunk_raw": 0,
     }
     for r in res:
         merged_res["raw"].update(r["raw"])
         merged_res["spine"].update(r["spine"])
         merged_res["seg"].update(r["seg"])
-        for k, v in r["new_branches"].items():
-            merged_res["new_branches"][k].update(v)
-        merged_res["num_contradict"] += r["num_contradict"]
+        merged_res["new_trunk"].update(r["new_trunk"])
+        merged_res["num_contradict_spine_seg"] += r["num_contradict_spine_seg"]
+        merged_res["num_contradict_new_trunk_raw"] += r["num_contradict_new_trunk_raw"]
     merged_res["raw"] = np.array(sorted(merged_res["raw"]))
     merged_res["spine"] = np.array(sorted(merged_res["spine"]))
     merged_res["seg"] = np.array(sorted(merged_res["seg"]))
-    merged_res["new_branches"] = dict(
-        {k: np.array(sorted(v)) for k, v in merged_res["new_branches"].items()}
-    )
+    merged_res["new_trunk"] = np.array(sorted(merged_res["new_trunk"]))
 
     np.savez(conf.data.broken_debug, merged_res=merged_res)
 

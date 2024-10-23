@@ -33,7 +33,7 @@ def fix_chunk(
     broken_raw_file,
     broken_spine_file,
     broken_seg_file,
-    broken_16_new_branches_file,
+    broken_new_branches_files,
     raw_file,
     spine_file,
     seg_file,
@@ -41,13 +41,18 @@ def fix_chunk(
     broken_raw_chunk = broken_raw_file[chunk]
     broken_spine_chunk = broken_spine_file[chunk]
     broken_seg_chunk = broken_seg_file[chunk]
-    broken_16_new_branches_chunk = broken_16_new_branches_file[chunk]
+    broken_new_branches_chunks = {
+        k: v[chunk] for k, v in broken_new_branches_files.items()
+    }
 
     # integrate new missing branches
-    broken_raw_chunk = np.maximum(
-        broken_raw_chunk,
-        (16 * (broken_16_new_branches_chunk > 0)).astype(broken_raw_chunk.dtype),
-    )
+    for trunk_id in broken_new_branches_chunks:
+        broken_raw_chunk = np.maximum(
+            broken_raw_chunk,
+            (trunk_id * (broken_new_branches_chunks[trunk_id] > 0)).astype(
+                broken_raw_chunk.dtype
+            ),
+        )
 
     assert np.all(
         implies(broken_spine_chunk > 0, broken_raw_chunk > 0)
@@ -55,7 +60,8 @@ def fix_chunk(
     assert np.array_equal(
         stats["raw"], stats["spine"]
     ), "unique raw and spine values are not equal"
-    assert 16 in stats["raw"], "16 not in raw values"
+    for trunk_id in broken_new_branches_chunks:
+        assert trunk_id in stats["raw"], f"{trunk_id} not in raw values"
     offset = stats["raw"].max()
     assert offset > 0
     assert (
@@ -84,9 +90,10 @@ def fix(conf):
         conf.data.broken_spine_key
     ]
     broken_seg_file = h5py.File(conf.data.broken_seg, "r")[conf.data.broken_seg_key]
-    broken_16_new_branches_file = h5py.File(conf.data.broken_16_new_branches, "r")[
-        conf.data.broken_16_new_branches_key
-    ]
+    broken_new_branches_files = {
+        x["trunk_id"]: h5py.File(x["file"], "r")[x["key"]]
+        for x in conf.data.broken_new_branches
+    }
 
     assert broken_raw_file.shape == broken_spine_file.shape == broken_seg_file.shape
 
@@ -130,7 +137,7 @@ def fix(conf):
             broken_raw_file,
             broken_spine_file,
             broken_seg_file,
-            broken_16_new_branches_file,
+            broken_new_branches_files,
             raw_file,
             spine_file,
             seg_file,
