@@ -36,7 +36,7 @@ def find_paths(
     path: Optional[List[int]] = None,
     seen: Optional[Set[int]] = None,
     current_weight: float = 0,
-) -> Iterator[Tuple[int]]:
+) -> Iterator[Tuple[Tuple[int], float]]:
     """
     Given a trunk skeleton graph, find all (non-intesecting) paths from a starting node to a node with total weight (slightly) greater than a target weight
 
@@ -53,6 +53,7 @@ def find_paths(
     Returns
     -------
     Iterator[np.ndarray]:
+    and current_weight
     """
     if path is None:
         path = [start]
@@ -64,20 +65,20 @@ def find_paths(
     valid_desc = [n for n in desc if n not in seen]
     if not valid_desc:
         # yield stump
-        yield tuple(path)
+        yield tuple(path), current_weight
     else:
         for n in valid_desc:
             edge_weight = G[start][n]["weight"]
             new_weight = current_weight + edge_weight
             if new_weight >= target_weight:
-                yield tuple(path + [n])
+                yield tuple(path + [n]), new_weight
             else:
                 yield from find_paths(
                     G, n, target_weight, path + [n], seen.union([n]), new_weight
                 )
 
 
-def get_random_path(G: nx.Graph, target_weight: float) -> Tuple[int]:
+def get_random_path(G: nx.Graph, target_weight: float) -> Tuple[Tuple[int], float]:
     """
     Given a trunk skeleton graph, find a random path greater than a target weight
 
@@ -95,31 +96,13 @@ def get_random_path(G: nx.Graph, target_weight: float) -> Tuple[int]:
     return paths[np.random.choice(len(paths))]
 
 
-def find_all_paths(G: nx.Graph, target_weight: float) -> List[Tuple[int]]:
-    """
-    Given a trunk skeleton graph, find all (non-intesecting) paths greater than a target weight
+def get_best_path(G, start, target_weight, nodes_remaining):
+    candidate_paths = list(find_paths(G, start=start, target_weight=target_weight))
+    assert len(candidate_paths) > 0, f"No paths found"
+    candidate_paths.sort(key=lambda x: len(set(x[0]) & nodes_remaining), reverse=True)
+    path, path_weight = candidate_paths[0]
 
-    Parameters
-    ----------
-    G
-    target_weight
-
-    Returns
-    -------
-    List[Tuple[int]]:
-    """
-    paths = []
-    for node in G.nodes:
-        paths.extend(list(find_paths(G, start=node, target_weight=target_weight)))
-    # deduplicate paths (A -> B is the same as B -> A)
-    canonical_paths = []
-    for path in paths:
-        if path[0] > path[-1]:
-            canonical_paths.append(tuple(reversed(path)))
-        else:
-            canonical_paths.append(path)
-
-    return list(set(canonical_paths))
+    return path, path_weight
 
 
 def get_spanning_paths(G: nx.Graph, target_weight: float) -> List[Tuple[int]]:
@@ -149,12 +132,18 @@ def get_spanning_paths(G: nx.Graph, target_weight: float) -> List[Tuple[int]]:
         ]
 
         start = np.random.choice(min_degree_nodes)
-        candidate_paths = list(find_paths(G, start=start, target_weight=target_weight))
-        assert len(candidate_paths) > 0, f"No paths found"
-        candidate_paths.sort(
-            key=lambda path: len(set(path) & nodes_remaining), reverse=True
-        )
-        path = candidate_paths[0]
+        path, path_weight = get_best_path(G, start, target_weight, nodes_remaining)
+        # if less than target_weight, redo search at end of path
+        if path_weight < target_weight:
+            path, path_weight = get_best_path(
+                G,
+                start=path[-1],
+                target_weight=target_weight,
+                nodes_remaining=nodes_remaining,
+            )
+            if path_weight < target_weight:
+                print(f"Warning: path has weight {path_weight} out of {target_weight}")
+
         paths.append(path)
         nodes_remaining -= set(path)
     return paths
